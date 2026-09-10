@@ -1,961 +1,1150 @@
---========================================================
--- PHONGHUY36 SERVER
--- Roblox Studio - dành cho game của bạn
---========================================================
+--==================================================
+-- PHHUYHUB V3 SERVER
+-- Roblox Studio / Own Game
+--==================================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local REMOTE_NAME = "PHONGHUY36_REMOTE"
-local FARM_RANGE = 5000
+local ADMIN_ID = 11645467051
 
-local Remote = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
+local Remote = ReplicatedStorage:FindFirstChild("PHHuyHub_V3")
 
 if not Remote then
-    Remote = Instance.new("RemoteEvent")
-    Remote.Name = REMOTE_NAME
-    Remote.Parent = ReplicatedStorage
+	Remote = Instance.new("RemoteEvent")
+	Remote.Name = "PHHuyHub_V3"
+	Remote.Parent = ReplicatedStorage
 end
-
---========================================================
--- ADMIN
--- THAY USER ID CỦA BẠN VÀO ĐÂY
---========================================================
-
-local ADMINS = {
-    [123456789] = true,
-}
 
 local function isAdmin(player)
-    return ADMINS[player.UserId] == true
+	return player.UserId == ADMIN_ID
 end
-
---========================================================
--- PLAYER FINDER
---========================================================
 
 local function findPlayer(text)
-    if not text or text == "" then
-        return nil
-    end
+	if not text then return nil end
 
-    text = string.lower(text)
+	text = tostring(text):lower()
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if string.lower(player.Name) == text then
-            return player
-        end
-    end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Name:lower() == text
+			or player.DisplayName:lower() == text then
+			return player
+		end
+	end
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if string.lower(player.DisplayName) == text then
-            return player
-        end
-    end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Name:lower():sub(1, #text) == text then
+			return player
+		end
+	end
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if string.lower(player.Name):sub(1, #text) == text then
-            return player
-        end
-    end
-
-    return nil
+	return nil
 end
 
---========================================================
--- GET ROOT
---========================================================
-
-local function getRoot(model)
-    if not model then
-        return nil
-    end
-
-    return model:FindFirstChild("HumanoidRootPart")
-        or model.PrimaryPart
+local function humanoid(player)
+	local character = player and player.Character
+	return character and character:FindFirstChildOfClass("Humanoid")
 end
 
---========================================================
--- KILL FOLDER
---========================================================
-
-local function killFolder(player, folderName)
-    local folder = workspace:FindFirstChild(folderName)
-
-    if not folder then
-        return
-    end
-
-    local character = player.Character
-    local root = getRoot(character)
-
-    if not root then
-        return
-    end
-
-    for _, npc in ipairs(folder:GetChildren()) do
-        local humanoid = npc:FindFirstChildOfClass("Humanoid")
-        local npcRoot = getRoot(npc)
-
-        if humanoid and npcRoot and humanoid.Health > 0 then
-            local distance = (npcRoot.Position - root.Position).Magnitude
-
-            if distance <= FARM_RANGE then
-                humanoid.Health = 0
-            end
-        end
-    end
+local function root(player)
+	local character = player and player.Character
+	return character and character:FindFirstChild("HumanoidRootPart")
 end
 
---========================================================
--- CHEST
---========================================================
+local function kill(player)
+	local hum = humanoid(player)
 
-local function collectChests(player)
-    local folder = workspace:FindFirstChild("Chests")
-
-    if not folder then
-        return
-    end
-
-    local character = player.Character
-    local root = getRoot(character)
-
-    if not root then
-        return
-    end
-
-    for _, chest in ipairs(folder:GetChildren()) do
-        local chestRoot = getRoot(chest)
-
-        if chestRoot then
-            local distance = (chestRoot.Position - root.Position).Magnitude
-
-            if distance <= FARM_RANGE then
-                chest:SetAttribute("Collected", true)
-
-                local prompt = chest:FindFirstChildWhichIsA(
-                    "ProximityPrompt",
-                    true
-                )
-
-                if prompt then
-                    prompt.Enabled = false
-                end
-
-                -- Hệ thống reward riêng của game có thể xử lý ở đây.
-            end
-        end
-    end
+	if hum then
+		hum.Health = 0
+	end
 end
 
---========================================================
--- FARM LOOP
---========================================================
-
-local farming = {}
-
-local function startFarm(player)
-    if farming[player] then
-        return
-    end
-
-    farming[player] = true
-
-    task.spawn(function()
-        while farming[player] and player.Parent do
-
-            killFolder(player, "Monsters")
-            killFolder(player, "Bosses")
-            collectChests(player)
-
-            task.wait(0.25)
-        end
-    end)
+local function respawn(player)
+	if player then
+		player:LoadCharacter()
+	end
 end
 
-local function stopFarm(player)
-    farming[player] = nil
+local function freeze(player, enabled)
+	local r = root(player)
+
+	if r then
+		r.Anchored = enabled
+	end
 end
 
---========================================================
--- ADMIN COMMAND
---========================================================
+local function bring(sender, target)
+	local a = root(sender)
+	local b = root(target)
 
-local function executeCommand(player, message)
-    if not isAdmin(player) then
-        return
-    end
-
-    local command, targetName = message:match("^%s*(%w+)%s*:%s*(.+)%s*$")
-
-    if not command or not targetName then
-        return
-    end
-
-    command = string.lower(command)
-    targetName = targetName:gsub("^%s+", ""):gsub("%s+$", "")
-
-    local target = findPlayer(targetName)
-
-    if command == "kill" then
-        if target and target.Character then
-            local humanoid =
-                target.Character:FindFirstChildOfClass("Humanoid")
-
-            if humanoid then
-                humanoid.Health = 0
-            end
-        end
-
-    elseif command == "kick" then
-        if target and target ~= player then
-            target:Kick("Removed by PHONGHUY36 Admin.")
-        end
-    end
+	if a and b then
+		b.CFrame = a.CFrame * CFrame.new(0, 0, -5)
+	end
 end
 
---========================================================
--- REMOTE
---========================================================
+local function teleportToSpawn(player)
+	local r = root(player)
+
+	if not r then return end
+
+	local spawnLocation
+
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("SpawnLocation") then
+			spawnLocation = obj
+			break
+		end
+	end
+
+	if spawnLocation then
+		r.CFrame =
+			spawnLocation.CFrame + Vector3.new(0, 4, 0)
+	end
+end
+
+local function executeCommand(sender, text)
+	if not isAdmin(sender) then
+		return
+	end
+
+	local args = string.split(text, " ")
+	local cmd = string.lower(args[1] or "")
+	local target = findPlayer(args[2])
+
+	if cmd == ";kill" and target then
+
+		kill(target)
+
+	elseif cmd == ";kick" and target and target ~= sender then
+
+		target:Kick(
+			"Removed by the game administrator."
+		)
+
+	elseif cmd == ";respawn" and target then
+
+		respawn(target)
+
+	elseif cmd == ";bring" and target then
+
+		bring(sender, target)
+
+	elseif cmd == ";freeze" and target then
+
+		freeze(target, true)
+
+	elseif cmd == ";unfreeze" and target then
+
+		freeze(target, false)
+
+	elseif cmd == ";tp" and target then
+
+		local senderRoot = root(sender)
+		local targetRoot = root(target)
+
+		if senderRoot and targetRoot then
+			senderRoot.CFrame =
+				targetRoot.CFrame *
+				CFrame.new(0, 0, -5)
+		end
+
+	elseif cmd == ";spawn" then
+
+		teleportToSpawn(sender)
+	end
+end
 
 Remote.OnServerEvent:Connect(function(player, action, data)
 
-    if action == "FarmStart" then
-        startFarm(player)
+	if action == "AdminCheck" then
 
-    elseif action == "FarmStop" then
-        stopFarm(player)
+		Remote:FireClient(
+			player,
+			"AdminStatus",
+			isAdmin(player)
+		)
 
-    elseif action == "KillMonsters" then
-        killFolder(player, "Monsters")
+	elseif action == "Command" then
 
-    elseif action == "KillBosses" then
-        killFolder(player, "Bosses")
-
-    elseif action == "CollectChests" then
-        collectChests(player)
-
-    elseif action == "Command" then
-        executeCommand(player, tostring(data or ""))
-
-    elseif action == "AdminCheck" then
-        Remote:FireClient(player, "AdminStatus", isAdmin(player))
-    end
+		executeCommand(
+			player,
+			tostring(data or "")
+		)
+	end
 end)
 
-Players.PlayerRemoving:Connect(function(player)
-    farming[player] = nil
-end)
---========================================================
--- PHONGHUY36 CLIENT
--- Roblox Studio - Mobile Hub
---========================================================
+print("[PHHuyHub V3] Server Ready")
+--==================================================
+-- PHHUYHUB V3 | PART 1/2
+-- Roblox Studio / Own Game
+--==================================================
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
-local TextChatService = game:GetService("TextChatService")
+local Players=game:GetService("Players")
+local Rep=game:GetService("ReplicatedStorage")
+local UIS=game:GetService("UserInputService")
+local Run=game:GetService("RunService")
+local Lighting=game:GetService("Lighting")
+local Stats=game:GetService("Stats")
 
-local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
+local LP=Players.LocalPlayer
+local PG=LP:WaitForChild("PlayerGui")
+local Remote=Rep:WaitForChild("PHHuyHub_V3")
 
-local Remote = ReplicatedStorage:WaitForChild(
-    "PHONGHUY36_REMOTE",
-    10
-)
+local old=PG:FindFirstChild("PHHuyHub_V3")
+if old then old:Destroy() end
 
-if not Remote then
-    warn("PHONGHUY36: RemoteEvent not found.")
-    return
-end
-
---========================================================
--- CONFIG
---========================================================
-
-local RANGE = 5000
-
-local State = {
-    Monster = false,
-    Boss = false,
-    Farm = false,
-    Chest = false,
-
-    MonsterESP = false,
-    BossESP = false,
-    ChestESP = false,
-
-    FullMap = false,
-    NoClip = false,
-    Performance = false,
-
-    Speed = false,
-    Jump = false,
-
-    Admin = false,
+local S={
+	PlayerESP=true,Name=true,Health=true,Tracer=true,
+	Box=true,Skeleton=true,NPC=false,Item=false,Monster=false,
+	Speed=true,Jump=true,Fly=true,NoClip=false,InfJump=false,
+	LowGraphics=false,HighFPS=false,
+	Stealth=false,HideName=false,HideEffects=false,
+	Animation=true
 }
 
---========================================================
--- GUI
---========================================================
+local V={
+	Speed=32,
+	Jump=70,
+	FlySpeed=55,
+	Distance=1000
+}
 
-local Gui = Instance.new("ScreenGui")
-Gui.Name = "PHONGHUY36"
-Gui.ResetOnSpawn = false
-Gui.IgnoreGuiInset = true
-Gui.Parent = PlayerGui
+local COL={
+	BG=Color3.fromRGB(3,7,15),
+	PANEL=Color3.fromRGB(5,12,24),
+	CARD=Color3.fromRGB(8,18,35),
+	CARD2=Color3.fromRGB(10,25,46),
+	BLUE=Color3.fromRGB(0,175,255),
+	CYAN=Color3.fromRGB(0,235,255),
+	TEXT=Color3.fromRGB(235,248,255),
+	MUTED=Color3.fromRGB(115,155,180),
+	GREEN=Color3.fromRGB(0,235,160)
+}
 
---========================================================
--- FLOAT BUTTON
---========================================================
+local function corner(x,r)
+	local c=Instance.new("UICorner")
+	c.CornerRadius=UDim.new(0,r)
+	c.Parent=x
+end
 
-local Float = Instance.new("TextButton")
-Float.Name = "OpenButton"
-Float.Size = UDim2.fromOffset(54,54)
-Float.Position = UDim2.new(0,15,0.5,-27)
-Float.Text = "$"
-Float.TextSize = 25
-Float.Font = Enum.Font.GothamBold
-Float.TextColor3 = Color3.new(1,1,1)
-Float.BackgroundColor3 = Color3.fromRGB(35,35,35)
-Float.Parent = Gui
+local function stroke(x,t)
+	local s=Instance.new("UIStroke")
+	s.Color=COL.BLUE
+	s.Thickness=1
+	s.Transparency=t or .6
+	s.Parent=x
+end
 
-local FloatCorner = Instance.new("UICorner")
-FloatCorner.CornerRadius = UDim.new(1,0)
-FloatCorner.Parent = Float
+local function txt(p,v,z,b)
+	local x=Instance.new("TextLabel")
+	x.BackgroundTransparency=1
+	x.Text=v
+	x.TextColor3=COL.TEXT
+	x.TextSize=z or 12
+	x.Font=b and Enum.Font.GothamBold or Enum.Font.Gotham
+	x.TextXAlignment=Enum.TextXAlignment.Left
+	x.Parent=p
+	return x
+end
 
---========================================================
+local GUI=Instance.new("ScreenGui")
+GUI.Name="PHHuyHub_V3"
+GUI.ResetOnSpawn=false
+GUI.IgnoreGuiInset=true
+GUI.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+GUI.Parent=PG
+
+--==================================================
+-- FLOATING BUTTON
+--==================================================
+
+local Float=Instance.new("TextButton")
+Float.Size=UDim2.fromOffset(62,62)
+Float.Position=UDim2.new(0,15,.5,-31)
+Float.BackgroundColor3=COL.PANEL
+Float.Text="PH"
+Float.TextColor3=COL.CYAN
+Float.TextSize=21
+Float.Font=Enum.Font.GothamBlack
+Float.AutoButtonColor=false
+Float.Parent=GUI
+corner(Float,22)
+stroke(Float,.1)
+
+--==================================================
 -- MAIN
---========================================================
+--==================================================
 
-local Main = Instance.new("Frame")
-Main.Name = "Main"
-Main.Size = UDim2.fromOffset(390,460)
-Main.Position = UDim2.new(0.5,-195,0.5,-230)
-Main.BackgroundColor3 = Color3.fromRGB(24,24,27)
-Main.BorderSizePixel = 0
-Main.Visible = true
-Main.Parent = Gui
+local Main=Instance.new("Frame")
+Main.AnchorPoint=Vector2.new(.5,.5)
+Main.Position=UDim2.fromScale(.5,.5)
+Main.Size=UDim2.fromScale(.92,.84)
+Main.BackgroundColor3=COL.BG
+Main.BorderSizePixel=0
+Main.Parent=GUI
+corner(Main,18)
+stroke(Main,.08)
 
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0,14)
-MainCorner.Parent = Main
+--==================================================
+-- HEADER
+--==================================================
 
---========================================================
--- TITLE
---========================================================
+local Header=Instance.new("Frame")
+Header.Size=UDim2.new(1,0,0,66)
+Header.BackgroundColor3=COL.PANEL
+Header.BorderSizePixel=0
+Header.Parent=Main
+corner(Header,18)
 
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1,-20,0,45)
-Title.Position = UDim2.fromOffset(10,5)
-Title.BackgroundTransparency = 1
-Title.Text = "PHONGHUY36"
-Title.TextSize = 23
-Title.Font = Enum.Font.GothamBold
-Title.TextColor3 = Color3.new(1,1,1)
-Title.Parent = Main
+local Logo=txt(Header,"PHHuyHub",25,true)
+Logo.Position=UDim2.fromOffset(20,7)
+Logo.Size=UDim2.fromOffset(300,30)
+Logo.TextColor3=COL.CYAN
 
-local SubTitle = Instance.new("TextLabel")
-SubTitle.Size = UDim2.new(1,-20,0,20)
-SubTitle.Position = UDim2.fromOffset(10,42)
-SubTitle.BackgroundTransparency = 1
-SubTitle.Text = "FULL DEVELOPMENT HUB"
-SubTitle.TextSize = 11
-SubTitle.Font = Enum.Font.Gotham
-SubTitle.TextColor3 = Color3.fromRGB(170,170,170)
-SubTitle.Parent = Main
+local Sub=txt(Header,"PLAY  •  FARM  •  DOMINATE",9,true)
+Sub.Position=UDim2.fromOffset(22,40)
+Sub.Size=UDim2.fromOffset(250,16)
+Sub.TextColor3=COL.MUTED
 
---========================================================
+local Stat=Instance.new("Frame")
+Stat.AnchorPoint=Vector2.new(1,0)
+Stat.Position=UDim2.new(1,-100,0,10)
+Stat.Size=UDim2.fromOffset(205,45)
+Stat.BackgroundColor3=COL.CARD
+Stat.Parent=Header
+corner(Stat,9)
+stroke(Stat,.75)
+
+local FPS=txt(Stat,"FPS: --",10,true)
+FPS.Position=UDim2.fromOffset(10,5)
+FPS.Size=UDim2.fromOffset(85,17)
+FPS.TextColor3=COL.GREEN
+
+local Ping=txt(Stat,"Ping: --",10,true)
+Ping.Position=UDim2.fromOffset(10,24)
+Ping.Size=UDim2.fromOffset(85,17)
+Ping.TextColor3=COL.CYAN
+
+local Count=txt(Stat,"Player: --",10,true)
+Count.Position=UDim2.fromOffset(100,14)
+Count.Size=UDim2.fromOffset(95,18)
+
+local Min=Instance.new("TextButton")
+Min.Size=UDim2.fromOffset(42,42)
+Min.Position=UDim2.new(1,-94,0,12)
+Min.BackgroundColor3=COL.CARD
+Min.Text="—"
+Min.TextColor3=COL.TEXT
+Min.TextSize=20
+Min.Parent=Header
+corner(Min,10)
+stroke(Min,.7)
+
+local Close=Instance.new("TextButton")
+Close.Size=UDim2.fromOffset(42,42)
+Close.Position=UDim2.new(1,-48,0,12)
+Close.BackgroundColor3=COL.CARD
+Close.Text="×"
+Close.TextColor3=COL.TEXT
+Close.TextSize=25
+Close.Parent=Header
+corner(Close,10)
+stroke(Close,.7)
+
+--==================================================
 -- SIDEBAR
---========================================================
+--==================================================
 
-local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.fromOffset(105,365)
-Sidebar.Position = UDim2.fromOffset(10,75)
-Sidebar.BackgroundColor3 = Color3.fromRGB(31,31,35)
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = Main
+local Side=Instance.new("Frame")
+Side.Position=UDim2.new(0,0,0,66)
+Side.Size=UDim2.new(0,155,1,-66)
+Side.BackgroundColor3=COL.PANEL
+Side.BorderSizePixel=0
+Side.Parent=Main
 
-local SidebarCorner = Instance.new("UICorner")
-SidebarCorner.CornerRadius = UDim.new(0,10)
-SidebarCorner.Parent = Sidebar
+local SP=Instance.new("UIPadding")
+SP.PaddingTop=UDim.new(0,12)
+SP.PaddingLeft=UDim.new(0,10)
+SP.PaddingRight=UDim.new(0,10)
+SP.Parent=Side
 
-local SideLayout = Instance.new("UIListLayout")
-SideLayout.Padding = UDim.new(0,5)
-SideLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-SideLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-SideLayout.Parent = Sidebar
+local SL=Instance.new("UIListLayout")
+SL.Padding=UDim.new(0,7)
+SL.Parent=Side
 
---========================================================
--- CONTENT
---========================================================
+local Content=Instance.new("Frame")
+Content.Position=UDim2.new(0,155,0,66)
+Content.Size=UDim2.new(1,-155,1,-66)
+Content.BackgroundTransparency=1
+Content.Parent=Main
 
-local Content = Instance.new("ScrollingFrame")
-Content.Size = UDim2.fromOffset(255,365)
-Content.Position = UDim2.fromOffset(125,75)
-Content.BackgroundColor3 = Color3.fromRGB(31,31,35)
-Content.BorderSizePixel = 0
-Content.ScrollBarThickness = 3
-Content.CanvasSize = UDim2.new(0,0,0,900)
-Content.Parent = Main
+local Pages={}
+local Tabs={}
 
-local ContentCorner = Instance.new("UICorner")
-ContentCorner.CornerRadius = UDim.new(0,10)
-ContentCorner.Parent = Content
+local TabData={
+	{"ESP","⌂"},
+	{"PLAYER","●"},
+	{"ADMIN","♛"},
+	{"PERFORMANCE","▥"},
+	{"STEALTH","◉"},
+	{"SETTINGS","⚙"}
+}
 
-local Layout = Instance.new("UIListLayout")
-Layout.Padding = UDim.new(0,7)
-Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-Layout.Parent = Content
+local function page(name)
+	local p=Instance.new("ScrollingFrame")
+	p.Name=name
+	p.Size=UDim2.fromScale(1,1)
+	p.BackgroundTransparency=1
+	p.BorderSizePixel=0
+	p.ScrollBarThickness=2
+	p.ScrollBarImageColor3=COL.BLUE
+	p.AutomaticCanvasSize=Enum.AutomaticSize.Y
+	p.CanvasSize=UDim2.new()
+	p.Visible=false
+	p.Parent=Content
 
---========================================================
--- HELPERS
---========================================================
+	local pad=Instance.new("UIPadding")
+	pad.PaddingTop=UDim.new(0,14)
+	pad.PaddingBottom=UDim.new(0,20)
+	pad.PaddingLeft=UDim.new(0,14)
+	pad.PaddingRight=UDim.new(0,14)
+	pad.Parent=p
 
-local Tabs = {}
+	local list=Instance.new("UIListLayout")
+	list.Padding=UDim.new(0,8)
+	list.Parent=p
 
-local function clearContent()
-    for _, child in ipairs(Content:GetChildren()) do
-        if not child:IsA("UIListLayout") then
-            child:Destroy()
-        end
-    end
+	Pages[name]=p
+	return p
 end
 
-local function button(text, callback)
-    local b = Instance.new("TextButton")
+for _,d in ipairs(TabData) do
+	page(d[1])
 
-    b.Size = UDim2.new(1,-16,0,42)
-    b.BackgroundColor3 = Color3.fromRGB(43,43,48)
-    b.BorderSizePixel = 0
-    b.Text = text
-    b.TextSize = 13
-    b.Font = Enum.Font.GothamSemibold
-    b.TextColor3 = Color3.new(1,1,1)
-    b.AutoButtonColor = true
-    b.Parent = Content
+	local b=Instance.new("TextButton")
+	b.Name=d[1]
+	b.Size=UDim2.new(1,0,0,45)
+	b.BackgroundColor3=COL.CARD
+	b.Text=d[2].."   "..d[1]
+	b.TextColor3=COL.TEXT
+	b.TextSize=12
+	b.Font=Enum.Font.GothamBold
+	b.AutoButtonColor=false
+	b.Parent=Side
+	corner(b,10)
+	stroke(b,.82)
+	Tabs[d[1]]=b
 
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0,8)
-    c.Parent = b
-
-    b.MouseButton1Click:Connect(callback)
-
-    return b
+	b.Activated:Connect(function()
+		for n,p in pairs(Pages) do
+			p.Visible=n==d[1]
+		end
+		for n,t in pairs(Tabs) do
+			t.BackgroundColor3=
+				n==d[1]
+				and Color3.fromRGB(0,75,110)
+				or COL.CARD
+		end
+	end)
 end
 
-local function toggle(text, key, callback)
-    local b
+--==================================================
+-- CARD
+--==================================================
 
-    local function refresh()
-        b.Text = text .. " : " .. (State[key] and "ON" or "OFF")
-    end
+local function card(p,title,sub)
+	local c=Instance.new("Frame")
+	c.Size=UDim2.new(1,0,0,66)
+	c.BackgroundColor3=COL.CARD
+	c.Parent=p
+	corner(c,11)
+	stroke(c,.72)
 
-    b = button(text, function()
-        State[key] = not State[key]
+	local a=txt(c,title,16,true)
+	a.Position=UDim2.fromOffset(15,8)
+	a.Size=UDim2.new(1,-30,0,24)
+	a.TextColor3=COL.CYAN
 
-        refresh()
+	local b=txt(c,sub or "",10)
+	b.Position=UDim2.fromOffset(16,36)
+	b.Size=UDim2.new(1,-30,0,18)
+	b.TextColor3=COL.MUTED
 
-        if callback then
-            callback(State[key])
-        end
-    end)
-
-    refresh()
-    return b
+	return c
 end
 
-local function section(text)
-    local label = Instance.new("TextLabel")
+--==================================================
+-- TOGGLE
+--==================================================
 
-    label.Size = UDim2.new(1,-16,0,30)
-    label.BackgroundTransparency = 1
-    label.Text = "  " .. text
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextSize = 13
-    label.Font = Enum.Font.GothamBold
-    label.TextColor3 = Color3.fromRGB(190,190,190)
-    label.Parent = Content
+local function toggle(p,name,key,callback)
+
+	local r=Instance.new("TextButton")
+	r.Size=UDim2.new(1,0,0,40)
+	r.BackgroundColor3=COL.CARD2
+	r.Text=""
+	r.AutoButtonColor=false
+	r.Parent=p
+	corner(r,8)
+
+	local t=txt(r,name,11,true)
+	t.Position=UDim2.fromOffset(12,0)
+	t.Size=UDim2.new(1,-70,1,0)
+
+	local sw=Instance.new("Frame")
+	sw.AnchorPoint=Vector2.new(1,.5)
+	sw.Position=UDim2.new(1,-10,.5,0)
+	sw.Size=UDim2.fromOffset(43,22)
+	sw.BackgroundColor3=Color3.fromRGB(25,43,61)
+	sw.Parent=r
+	corner(sw,12)
+
+	local dot=Instance.new("Frame")
+	dot.Size=UDim2.fromOffset(16,16)
+	dot.Position=UDim2.fromOffset(3,3)
+	dot.BackgroundColor3=COL.MUTED
+	dot.Parent=sw
+	corner(dot,10)
+
+	local function update()
+		if S[key] then
+			sw.BackgroundColor3=Color3.fromRGB(0,105,150)
+			dot.Position=UDim2.new(1,-19,0,3)
+			dot.BackgroundColor3=COL.CYAN
+		else
+			sw.BackgroundColor3=Color3.fromRGB(25,43,61)
+			dot.Position=UDim2.fromOffset(3,3)
+			dot.BackgroundColor3=COL.MUTED
+		end
+	end
+
+	r.Activated:Connect(function()
+		S[key]=not S[key]
+		update()
+		if callback then callback(S[key]) end
+	end)
+
+	update()
+	return r
 end
 
-local function tab(name)
-    local b = Instance.new("TextButton")
+--==================================================
+-- SLIDER
+--==================================================
 
-    b.Size = UDim2.new(1,-10,0,38)
-    b.BackgroundColor3 = Color3.fromRGB(43,43,48)
-    b.BorderSizePixel = 0
-    b.Text = name
-    b.TextSize = 12
-    b.Font = Enum.Font.GothamSemibold
-    b.TextColor3 = Color3.new(1,1,1)
-    b.Parent = Sidebar
+local function slider(p,name,key,min,max)
 
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0,8)
-    c.Parent = b
+	local h=Instance.new("Frame")
+	h.Size=UDim2.new(1,0,0,52)
+	h.BackgroundTransparency=1
+	h.Parent=p
 
-    return b
+	local n=txt(h,name,10)
+	n.Size=UDim2.new(.7,0,0,18)
+
+	local val=txt(h,tostring(V[key]),10,true)
+	val.AnchorPoint=Vector2.new(1,0)
+	val.Position=UDim2.new(1,0,0,0)
+	val.Size=UDim2.fromOffset(50,18)
+	val.TextXAlignment=Enum.TextXAlignment.Right
+
+	local bar=Instance.new("Frame")
+	bar.Position=UDim2.new(0,0,0,29)
+	bar.Size=UDim2.new(1,0,0,5)
+	bar.BackgroundColor3=Color3.fromRGB(25,47,70)
+	bar.Parent=h
+	corner(bar,5)
+
+	local fill=Instance.new("Frame")
+	fill.BackgroundColor3=COL.BLUE
+	fill.Parent=bar
+	corner(fill,5)
+
+	local knob=Instance.new("Frame")
+	knob.Size=UDim2.fromOffset(11,11)
+	knob.AnchorPoint=Vector2.new(.5,.5)
+	knob.BackgroundColor3=COL.CYAN
+	knob.Parent=bar
+	corner(knob,8)
+
+	local function update()
+		local x=(V[key]-min)/(max-min)
+		fill.Size=UDim2.new(x,0,1,0)
+		knob.Position=UDim2.new(x,0,.5,0)
+		val.Text=tostring(V[key])
+	end
+
+	local drag=false
+
+	bar.InputBegan:Connect(function(i)
+		if i.UserInputType==Enum.UserInputType.MouseButton1
+			or i.UserInputType==Enum.UserInputType.Touch then
+			drag=true
+		end
+	end)
+
+	UIS.InputChanged:Connect(function(i)
+		if not drag then return end
+		if i.UserInputType==Enum.UserInputType.MouseMovement
+			or i.UserInputType==Enum.UserInputType.Touch then
+
+			local q=math.clamp(
+				(i.Position.X-bar.AbsolutePosition.X)/
+				bar.AbsoluteSize.X,0,1)
+
+			V[key]=math.floor(min+(max-min)*q+.5)
+			update()
+		end
+	end)
+
+	UIS.InputEnded:Connect(function(i)
+		if i.UserInputType==Enum.UserInputType.MouseButton1
+			or i.UserInputType==Enum.UserInputType.Touch then
+			drag=false
+		end
+	end)
+
+	update()
 end
 
---========================================================
--- COMBAT
---========================================================
+--==================================================
+-- ESP PAGE
+--==================================================
 
-local function loadCombat()
+do
+	local p=Pages.ESP
 
-    clearContent()
+	card(p,"◎  ESP","Hiển thị người chơi, NPC, vật phẩm...")
 
-    section("COMBAT")
+	toggle(p,"Player ESP","PlayerESP")
+	toggle(p,"Tên + Khoảng cách","Name")
+	toggle(p,"Hiển thị HP","Health")
+	toggle(p,"Đường kẻ (Tracer)","Tracer")
+	toggle(p,"Khung (Box)","Box")
+	toggle(p,"Skeleton (Xương)","Skeleton")
 
-    toggle("AUTO KILL MONSTER","Monster",function(on)
-        Remote:FireServer(on and "FarmStart" or "FarmStop")
-    end)
+	slider(p,"Khoảng cách tối đa","Distance",100,3000)
 
-    toggle("AUTO KILL BOSS","Boss",function(on)
-        Remote:FireServer(on and "FarmStart" or "FarmStop")
-    end)
-
-    button("KILL ALL MONSTERS",function()
-        Remote:FireServer("KillMonsters")
-    end)
-
-    button("KILL ALL BOSSES",function()
-        Remote:FireServer("KillBosses")
-    end)
-
-    section("RANGE")
-
-    local rangeLabel = Instance.new("TextLabel")
-    rangeLabel.Size = UDim2.new(1,-16,0,35)
-    rangeLabel.BackgroundTransparency = 1
-    rangeLabel.Text = "Kill Range : " .. RANGE .. " studs"
-    rangeLabel.TextSize = 13
-    rangeLabel.Font = Enum.Font.Gotham
-    rangeLabel.TextColor3 = Color3.new(1,1,1)
-    rangeLabel.Parent = Content
+	toggle(p,"ESP NPC","NPC")
+	toggle(p,"ESP Vật phẩm","Item")
+	toggle(p,"ESP Quái","Monster")
 end
 
---========================================================
--- FARM
---========================================================
+--==================================================
+-- PLAYER PAGE
+--==================================================
 
-local function loadFarm()
+do
+	local p=Pages.PLAYER
 
-    clearContent()
+	card(p,"●  PLAYER","Tăng tốc, nhảy, noclip...")
 
-    section("FARM SYSTEM")
+	toggle(p,"Speed","Speed",function(on)
+		local c=LP.Character
+		local h=c and c:FindFirstChildOfClass("Humanoid")
+		if h then h.WalkSpeed=on and V.Speed or 16 end
+	end)
 
-    toggle("AUTO FARM ALL","Farm",function(on)
-        Remote:FireServer(on and "FarmStart" or "FarmStop")
-    end)
+	slider(p,"Speed Value","Speed",16,100)
 
-    toggle("AUTO COLLECT CHEST","Chest",function(on)
-        Remote:FireServer(on and "FarmStart" or "FarmStop")
-    end)
+	toggle(p,"Jump","Jump",function(on)
+		local c=LP.Character
+		local h=c and c:FindFirstChildOfClass("Humanoid")
+		if h then h.JumpPower=on and V.Jump or 50 end
+	end)
 
-    button("COLLECT CHESTS NOW",function()
-        Remote:FireServer("CollectChests")
-    end)
+	slider(p,"Jump Value","Jump",50,150)
 
-    button("AUTO QUEST",function()
-        warn("Connect your game's quest system here.")
-    end)
+	toggle(p,"Fly","Fly")
+	slider(p,"Fly Speed","FlySpeed",20,120)
 
-    button("STOP ALL FARM",function()
-        State.Farm = false
-        State.Monster = false
-        State.Boss = false
-        State.Chest = false
-
-        Remote:FireServer("FarmStop")
-    end)
+	toggle(p,"NoClip","NoClip")
+	toggle(p,"Infinite Jump","InfJump")
 end
 
---========================================================
--- VISUAL
---========================================================
+--==================================================
+-- PLACEHOLDER PAGES
+-- PART 2 FILLS THESE
+--==================================================
 
-local ESPObjects = {}
+card(Pages.ADMIN,"♛  ADMIN SERVER","Lệnh quản trị server")
+card(Pages.PERFORMANCE,"▥  PERFORMANCE","Hiệu suất & thông tin hệ thống")
+card(Pages.STEALTH,"◉  STEALTH TEST","Kiểm thử visibility")
+card(Pages.SETTINGS,"⚙  SETTINGS","Cài đặt & tùy chỉnh")
 
-local function removeESP()
-    for _, object in pairs(ESPObjects) do
-        if object then
-            object:Destroy()
-        end
-    end
+Pages.ESP.Visible=true
+Tabs.ESP.BackgroundColor3=Color3.fromRGB(0,75,110)
 
-    table.clear(ESPObjects)
-end
+print("[PHHuyHub V3] PART 1 READY")
+--==================================================
+-- PHHUYHUB V3 | PART 2/2
+--==================================================
 
-local function makeESP(model, label)
-
-    if not model:IsA("Model") then
-        return
-    end
-
-    local root =
-        model:FindFirstChild("HumanoidRootPart")
-        or model.PrimaryPart
-
-    if not root then
-        return
-    end
-
-    if root:FindFirstChild("PHONGHUY_ESP") then
-        return
-    end
-
-    local gui = Instance.new("BillboardGui")
-    gui.Name = "PHONGHUY_ESP"
-    gui.Size = UDim2.fromOffset(150,35)
-    gui.StudsOffset = Vector3.new(0,3,0)
-    gui.AlwaysOnTop = true
-    gui.Adornee = root
-    gui.Parent = root
-
-    local text = Instance.new("TextLabel")
-    text.Size = UDim2.fromScale(1,1)
-    text.BackgroundTransparency = 1
-    text.Text = label
-    text.TextSize = 12
-    text.Font = Enum.Font.GothamBold
-    text.TextColor3 = Color3.new(1,1,1)
-    text.Parent = gui
-
-    table.insert(ESPObjects,gui)
-end
-
-local function loadVisual()
-
-    clearContent()
-
-    section("ESP")
-
-    toggle("MONSTER ESP","MonsterESP",function(on)
-        removeESP()
-
-        if on then
-            local folder = workspace:FindFirstChild("Monsters")
-
-            if folder then
-                for _, model in ipairs(folder:GetChildren()) do
-                    makeESP(model,"MONSTER")
-                end
-            end
-        end
-    end)
-
-    toggle("BOSS ESP","BossESP",function(on)
-        removeESP()
-
-        if on then
-            local folder = workspace:FindFirstChild("Bosses")
-
-            if folder then
-                for _, model in ipairs(folder:GetChildren()) do
-                    makeESP(model,"BOSS")
-                end
-            end
-        end
-    end)
-
-    toggle("CHEST ESP","ChestESP",function(on)
-        removeESP()
-
-        if on then
-            local folder = workspace:FindFirstChild("Chests")
-
-            if folder then
-                for _, model in ipairs(folder:GetChildren()) do
-                    makeESP(model,"CHEST")
-                end
-            end
-        end
-    end)
-
-    toggle("FULL MAP / NO FOG","FullMap",function(on)
-
-        if on then
-            Lighting.FogEnd = 1000000
-        else
-            Lighting.FogEnd = 1000
-        end
-    end)
-end
-
---========================================================
--- PLAYER
---========================================================
-
-local function loadPlayer()
-
-    clearContent()
-
-    section("PLAYER")
-
-    toggle("SPEED","Speed",function(on)
-
-        local character = Player.Character
-        local humanoid =
-            character and character:FindFirstChildOfClass("Humanoid")
-
-        if humanoid then
-            humanoid.WalkSpeed = on and 32 or 16
-        end
-    end)
-
-    toggle("JUMP","Jump",function(on)
-
-        local character = Player.Character
-        local humanoid =
-            character and character:FindFirstChildOfClass("Humanoid")
-
-        if humanoid then
-            humanoid.UseJumpPower = true
-            humanoid.JumpPower = on and 80 or 50
-        end
-    end)
-
-    toggle("NOCLIP","NoClip")
-
-    toggle("PERFORMANCE MODE","Performance",function(on)
-
-        if on then
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        else
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
-        end
-    end)
-end
-
---========================================================
--- CHAT
---========================================================
-
-local function loadChat()
-
-    clearContent()
-
-    section("ROBLOX CHAT")
-
-    local input = Instance.new("TextBox")
-
-    input.Size = UDim2.new(1,-16,0,45)
-    input.PlaceholderText = "Nhập tin nhắn..."
-    input.Text = ""
-    input.TextSize = 13
-    input.Font = Enum.Font.Gotham
-    input.TextColor3 = Color3.new(1,1,1)
-    input.BackgroundColor3 = Color3.fromRGB(43,43,48)
-    input.Parent = Content
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0,8)
-    corner.Parent = input
-
-    button("SEND TO ROBLOX CHAT",function()
-
-        local message = input.Text
-
-        if message == "" then
-            return
-        end
-
-        local channels = TextChatService:FindFirstChild("TextChannels")
-        local general = channels and channels:FindFirstChild("RBXGeneral")
-
-        if general then
-            general:SendAsync(message)
-            input.Text = ""
-        end
-    end)
-end
-
---========================================================
+--==================================================
 -- ADMIN
---========================================================
+--==================================================
 
-local CommandBox
+do
+	local p=Pages.ADMIN
 
-local function loadAdmin()
+	for _,x in ipairs(p:GetChildren()) do
+		if x:IsA("Frame") then x:Destroy() end
+	end
 
-    clearContent()
+	card(p,"♛  ADMIN SERVER","Lệnh quản trị & công cụ server")
 
-    section("ADMIN")
+	local Status=txt(p,"● Đang kiểm tra quyền...",11,true)
+	Status.Size=UDim2.new(1,0,0,25)
+	Status.TextColor3=COL.MUTED
 
-    CommandBox = Instance.new("TextBox")
+	local Box=Instance.new("TextBox")
+	Box.Size=UDim2.new(1,0,0,45)
+	Box.BackgroundColor3=COL.CARD
+	Box.TextColor3=COL.TEXT
+	Box.PlaceholderColor3=COL.MUTED
+	Box.PlaceholderText="Nhập lệnh..."
+	Box.Text=""
+	Box.TextSize=12
+	Box.Font=Enum.Font.Code
+	Box.ClearTextOnFocus=false
+	Box.Parent=p
+	corner(Box,9)
+	stroke(Box,.72)
 
-    CommandBox.Size = UDim2.new(1,-16,0,45)
-    CommandBox.PlaceholderText = "kill: PlayerName"
-    CommandBox.Text = ""
-    CommandBox.TextSize = 13
-    CommandBox.Font = Enum.Font.Gotham
-    CommandBox.TextColor3 = Color3.new(1,1,1)
-    CommandBox.BackgroundColor3 = Color3.fromRGB(43,43,48)
-    CommandBox.Parent = Content
+	local Send=Instance.new("TextButton")
+	Send.Size=UDim2.new(1,0,0,45)
+	Send.BackgroundColor3=Color3.fromRGB(0,70,105)
+	Send.Text="➤  GỬI LỆNH SERVER"
+	Send.TextColor3=COL.TEXT
+	Send.TextSize=12
+	Send.Font=Enum.Font.GothamBold
+	Send.Parent=p
+	corner(Send,9)
+	stroke(Send,.5)
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0,8)
-    corner.Parent = CommandBox
+	Send.Activated:Connect(function()
+		if Box.Text~="" then
+			Remote:FireServer("Command",Box.Text)
+			Box.Text=""
+		end
+	end)
 
-    button("EXECUTE COMMAND",function()
+	local Help=txt(p,
+		";kill Name\n"..
+		";kick Name\n"..
+		";respawn Name\n"..
+		";tp Name\n"..
+		";bring Name\n"..
+		";freeze Name\n"..
+		";unfreeze Name\n"..
+		";spawn",
+		11)
 
-        if CommandBox.Text ~= "" then
-            Remote:FireServer(
-                "Command",
-                CommandBox.Text
-            )
+	Help.Size=UDim2.new(1,0,0,170)
+	Help.TextColor3=COL.MUTED
 
-            CommandBox.Text = ""
-        end
-    end)
+	Remote.OnClientEvent:Connect(function(action,value)
+		if action=="AdminStatus" then
+			if value then
+				Status.Text="● ADMIN AUTHORIZED"
+				Status.TextColor3=COL.GREEN
+				Logo.Text="PHHuyHub  •  ADMIN"
+			else
+				Status.Text="● USER"
+				Status.TextColor3=COL.MUTED
+			end
+		end
+	end)
 
-    section("EXAMPLES")
-
-    button("kill: PlayerName",function()
-        CommandBox.Text = "kill: PlayerName"
-    end)
-
-    button("kick: PlayerName",function()
-        CommandBox.Text = "kick: PlayerName"
-    end)
+	Remote:FireServer("AdminCheck")
 end
 
---========================================================
--- TABS
---========================================================
+--==================================================
+-- PERFORMANCE
+--==================================================
 
-local combatTab = tab("⚔ Combat")
-local farmTab = tab("💰 Farm")
-local visualTab = tab("👁 Visual")
-local playerTab = tab("🏃 Player")
-local chatTab = tab("💬 Chat")
-local adminTab = tab("⚙ Admin")
+do
+	local p=Pages.PERFORMANCE
 
-combatTab.MouseButton1Click:Connect(loadCombat)
-farmTab.MouseButton1Click:Connect(loadFarm)
-visualTab.MouseButton1Click:Connect(loadVisual)
-playerTab.MouseButton1Click:Connect(loadPlayer)
-chatTab.MouseButton1Click:Connect(loadChat)
-adminTab.MouseButton1Click:Connect(loadAdmin)
+	for _,x in ipairs(p:GetChildren()) do
+		if x:IsA("Frame") then x:Destroy() end
+	end
 
---========================================================
--- NOCLIP
---========================================================
+	card(p,"▥  PERFORMANCE","Hiệu suất & thông tin hệ thống")
 
-RunService.Stepped:Connect(function()
+	local BigFPS=txt(p,"FPS     --",17,true)
+	BigFPS.Size=UDim2.new(1,0,0,32)
+	BigFPS.TextColor3=COL.GREEN
 
-    if not State.NoClip then
-        return
-    end
+	local BigPing=txt(p,"Ping    --",12,true)
+	BigPing.Size=UDim2.new(1,0,0,28)
+	BigPing.TextColor3=COL.CYAN
 
-    local character = Player.Character
+	toggle(p,"High FPS","HighFPS")
 
-    if not character then
-        return
-    end
+	toggle(p,"Low Graphics","LowGraphics",function(on)
+		Lighting.GlobalShadows=not on
+		if on then Lighting.Brightness=1 end
+	end)
 
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-        end
-    end
+	local Mode=txt(p,"Performance Mode: ACTIVE",11)
+	Mode.Size=UDim2.new(1,0,0,30)
+	Mode.TextColor3=COL.MUTED
+
+	local frames=0
+	local start=os.clock()
+
+	Run.RenderStepped:Connect(function()
+		frames+=1
+
+		if os.clock()-start>=1 then
+			local f=math.floor(frames)
+
+			FPS.Text="FPS: "..f
+			BigFPS.Text="FPS     "..f
+			Count.Text="Player: "..#Players:GetPlayers()
+
+			frames=0
+			start=os.clock()
+		end
+	end)
+
+	task.spawn(function()
+		while GUI.Parent do
+			task.wait(1)
+
+			local ok,v=pcall(function()
+				return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+			end)
+
+			if ok then
+				local q=math.floor(v)
+
+				Ping.Text="Ping: "..q.."ms"
+				BigPing.Text="Ping    "..q.."ms"
+			end
+		end
+	end)
+end
+
+--==================================================
+-- STEALTH
+--==================================================
+
+do
+	local p=Pages.STEALTH
+
+	for _,x in ipairs(p:GetChildren()) do
+		if x:IsA("Frame") then x:Destroy() end
+	end
+
+	card(p,"◉  STEALTH TEST",
+		"Kiểm thử visibility phía client")
+
+	local function visibility(on)
+
+		local c=LP.Character
+		if not c then return end
+
+		for _,x in ipairs(c:GetDescendants()) do
+			if x:IsA("BasePart") then
+				x.LocalTransparencyModifier=on and 1 or 0
+			elseif x:IsA("Decal") then
+				x.Transparency=on and 1 or 0
+			end
+		end
+	end
+
+	toggle(p,"Stealth (Local Test)","Stealth",visibility)
+
+	toggle(p,"Ẩn tên","HideName",function(on)
+		local c=LP.Character
+		local h=c and c:FindFirstChildOfClass("Humanoid")
+
+		if h then
+			h.DisplayDistanceType=
+				on
+				and Enum.HumanoidDisplayDistanceType.None
+				or Enum.HumanoidDisplayDistanceType.Viewer
+		end
+	end)
+
+	toggle(p,"Ẩn hiệu ứng","HideEffects")
+
+	local info=txt(p,
+		"Stealth là kiểm thử visibility phía client\n"..
+		"trong game Roblox của bạn.",
+		11)
+
+	info.Size=UDim2.new(1,0,0,55)
+	info.TextColor3=COL.MUTED
+end
+
+--==================================================
+-- SETTINGS
+--==================================================
+
+do
+	local p=Pages.SETTINGS
+
+	for _,x in ipairs(p:GetChildren()) do
+		if x:IsA("Frame") then x:Destroy() end
+	end
+
+	card(p,"⚙  SETTINGS","Cài đặt & tùy chỉnh")
+
+	toggle(p,"UI Animation","Animation")
+
+	local theme=txt(p,"Theme       NEON BLUE",12,true)
+	theme.Size=UDim2.new(1,0,0,35)
+	theme.TextColor3=COL.CYAN
+
+	local lang=txt(p,"Language    Tiếng Việt",12,true)
+	lang.Size=UDim2.new(1,0,0,35)
+
+	local device=txt(p,"Device       Mobile • Tablet • PC",11)
+	device.Size=UDim2.new(1,0,0,35)
+	device.TextColor3=COL.MUTED
+
+	local Reset=Instance.new("TextButton")
+	Reset.Size=UDim2.new(1,0,0,45)
+	Reset.BackgroundColor3=COL.CARD
+	Reset.Text="↻  RESET CÀI ĐẶT"
+	Reset.TextColor3=COL.CYAN
+	Reset.TextSize=12
+	Reset.Font=Enum.Font.GothamBold
+	Reset.Parent=p
+	corner(Reset,9)
+	stroke(Reset,.7)
+
+	Reset.Activated:Connect(function()
+		S.Speed=false
+		S.Jump=false
+		S.Fly=false
+		S.NoClip=false
+		S.InfJump=false
+
+		local c=LP.Character
+		local h=c and c:FindFirstChildOfClass("Humanoid")
+
+		if h then
+			h.WalkSpeed=16
+			h.JumpPower=50
+		end
+	end)
+end
+
+--==================================================
+-- OPEN / CLOSE
+--==================================================
+
+local Opened=true
+
+Float.Activated:Connect(function()
+	Opened=not Opened
+	Main.Visible=Opened
 end)
 
---========================================================
--- FLOAT TOGGLE
---========================================================
-
-Float.MouseButton1Click:Connect(function()
-
-    Main.Visible = not Main.Visible
-
-    if Main.Visible then
-        Main.Size = UDim2.fromOffset(350,420)
-
-        TweenService:Create(
-            Main,
-            TweenInfo.new(0.18),
-            {
-                Size = UDim2.fromOffset(390,460)
-            }
-        ):Play()
-    end
+Close.Activated:Connect(function()
+	Opened=false
+	Main.Visible=false
 end)
 
---========================================================
--- DRAG
---========================================================
+Min.Activated:Connect(function()
+	Main.Visible=false
+end)
 
-local dragging = false
+--==================================================
+-- DRAG MOBILE / PC
+--==================================================
+
+local dragging=false
 local dragStart
 local startPos
 
-Title.InputBegan:Connect(function(input)
+Header.InputBegan:Connect(function(i)
+	if i.UserInputType==Enum.UserInputType.MouseButton1
+		or i.UserInputType==Enum.UserInputType.Touch then
 
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-
-        dragging = true
-        dragStart = input.Position
-        startPos = Main.Position
-    end
+		dragging=true
+		dragStart=i.Position
+		startPos=Main.Position
+	end
 end)
 
-Title.InputEnded:Connect(function(input)
+UIS.InputChanged:Connect(function(i)
+	if not dragging then return end
 
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
+	if i.UserInputType==Enum.UserInputType.MouseMovement
+		or i.UserInputType==Enum.UserInputType.Touch then
 
-        dragging = false
-    end
+		local d=i.Position-dragStart
+
+		Main.Position=UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset+d.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset+d.Y
+		)
+	end
 end)
 
-Title.InputChanged:Connect(function(input)
-
-    if not dragging then
-        return
-    end
-
-    if input.UserInputType ~= Enum.UserInputType.MouseMovement
-        and input.UserInputType ~= Enum.UserInputType.Touch then
-        return
-    end
-
-    local delta = input.Position - dragStart
-
-    Main.Position = UDim2.new(
-        startPos.X.Scale,
-        startPos.X.Offset + delta.X,
-        startPos.Y.Scale,
-        startPos.Y.Offset + delta.Y
-    )
+UIS.InputEnded:Connect(function(i)
+	if i.UserInputType==Enum.UserInputType.MouseButton1
+		or i.UserInputType==Enum.UserInputType.Touch then
+		dragging=false
+	end
 end)
 
---========================================================
--- ADMIN STATUS
---========================================================
+--==================================================
+-- MOBILE RESPONSIVE
+--==================================================
 
-Remote.OnClientEvent:Connect(function(action, value)
+local function Layout()
 
-    if action == "AdminStatus" then
-        State.Admin = value
+	local cam=workspace.CurrentCamera
+	if not cam then return end
 
-        if not value then
-            adminTab.Visible = false
-        end
-    end
+	local w=cam.ViewportSize.X
+
+	if w<=700 then
+
+		Main.Size=UDim2.fromScale(.97,.93)
+
+		Side.Size=UDim2.new(0,58,1,-66)
+
+		Content.Position=UDim2.new(0,58,0,66)
+
+		Content.Size=UDim2.new(1,-58,1,-66)
+
+		Sub.Visible=false
+		Stat.Visible=false
+
+		for _,d in ipairs(TabData) do
+			Tabs[d[1]].Text=d[2]
+			Tabs[d[1]].TextSize=17
+		end
+
+	elseif w<=1000 then
+
+		Main.Size=UDim2.fromScale(.95,.89)
+
+		Side.Size=UDim2.new(0,100,1,-66)
+
+		Content.Position=UDim2.new(0,100,0,66)
+
+		Content.Size=UDim2.new(1,-100,1,-66)
+
+	else
+
+		Main.Size=UDim2.fromScale(.92,.84)
+
+		Side.Size=UDim2.new(0,155,1,-66)
+
+		Content.Position=UDim2.new(0,155,0,66)
+
+		Content.Size=UDim2.new(1,-155,1,-66)
+
+		Sub.Visible=true
+		Stat.Visible=true
+
+		for _,d in ipairs(TabData) do
+			Tabs[d[1]].Text=d[2].."   "..d[1]
+			Tabs[d[1]].TextSize=12
+		end
+	end
+end
+
+workspace.CurrentCamera:
+	GetPropertyChangedSignal("ViewportSize"):
+	Connect(Layout)
+
+Layout()
+
+--==================================================
+-- NOCLIP
+--==================================================
+
+Run.Stepped:Connect(function()
+
+	if not S.NoClip then return end
+
+	local c=LP.Character
+
+	if c then
+		for _,x in ipairs(c:GetDescendants()) do
+			if x:IsA("BasePart") then
+				x.CanCollide=false
+			end
+		end
+	end
 end)
 
-Remote:FireServer("AdminCheck")
+--==================================================
+-- INFINITE JUMP
+--==================================================
 
---========================================================
--- START
---========================================================
+UIS.JumpRequest:Connect(function()
 
-loadCombat()
+	if not S.InfJump then return end
 
-print("PHONGHUY36 CLIENT LOADED")
+	local c=LP.Character
+	local h=c and c:FindFirstChildOfClass("Humanoid")
+
+	if h then
+		h:ChangeState(
+			Enum.HumanoidStateType.Jumping
+		)
+	end
+end)
+
+--==================================================
+-- FLY
+--==================================================
+
+Run.RenderStepped:Connect(function()
+
+	if not S.Fly then return end
+
+	local c=LP.Character
+	if not c then return end
+
+	local r=c:FindFirstChild("HumanoidRootPart")
+	local h=c:FindFirstChildOfClass("Humanoid")
+
+	if r and h then
+
+		local d=h.MoveDirection
+
+		r.AssemblyLinearVelocity=Vector3.new(
+			d.X*V.FlySpeed,
+			0,
+			d.Z*V.FlySpeed
+		)
+	end
+end)
+
+--==================================================
+-- LIVE SPEED / JUMP
+--==================================================
+
+Run.Heartbeat:Connect(function()
+
+	local c=LP.Character
+	local h=c and c:FindFirstChildOfClass("Humanoid")
+
+	if not h then return end
+
+	if S.Speed then
+		h.WalkSpeed=V.Speed
+	end
+
+	if S.Jump then
+		h.JumpPower=V.Jump
+	end
+end)
+
+print("================================")
+print(" PHHUYHUB V3 • NEON BLUE")
+print(" CLIENT FULLY LOADED")
+print("================================")
