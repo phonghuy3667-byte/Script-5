@@ -1,39 +1,60 @@
---==================================================
--- PHHUYHUB V3 SERVER
+--========================================================
+-- PHHUYHUB V3 - SERVER
 -- Roblox Studio / Own Game
---==================================================
+--========================================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local ADMIN_ID = 11645467051
+--========================================================
+-- CONFIG
+--========================================================
 
-local Remote = ReplicatedStorage:FindFirstChild("PHHuyHub_V3")
+local ADMIN_IDS = {
+	[11645467051] = true,
+}
+
+local REMOTE_NAME = "PHHuyHub_V3"
+
+--========================================================
+-- REMOTE
+--========================================================
+
+local Remote = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
 
 if not Remote then
 	Remote = Instance.new("RemoteEvent")
-	Remote.Name = "PHHuyHub_V3"
+	Remote.Name = REMOTE_NAME
 	Remote.Parent = ReplicatedStorage
 end
 
+--========================================================
+-- ADMIN
+--========================================================
+
 local function isAdmin(player)
-	return player.UserId == ADMIN_ID
+	return player ~= nil and ADMIN_IDS[player.UserId] == true
 end
 
-local function findPlayer(text)
-	if not text then return nil end
+local function findPlayer(name)
+	if not name or name == "" then
+		return nil
+	end
 
-	text = tostring(text):lower()
+	name = tostring(name):lower()
 
+	-- Exact username/display name
 	for _, player in ipairs(Players:GetPlayers()) do
-		if player.Name:lower() == text
-			or player.DisplayName:lower() == text then
+		if player.Name:lower() == name
+			or player.DisplayName:lower() == name then
 			return player
 		end
 	end
 
+	-- Partial username/display name
 	for _, player in ipairs(Players:GetPlayers()) do
-		if player.Name:lower():sub(1, #text) == text then
+		if player.Name:lower():sub(1, #name) == name
+			or player.DisplayName:lower():sub(1, #name) == name then
 			return player
 		end
 	end
@@ -41,118 +62,199 @@ local function findPlayer(text)
 	return nil
 end
 
-local function humanoid(player)
-	local character = player and player.Character
-	return character and character:FindFirstChildOfClass("Humanoid")
+--========================================================
+-- CHARACTER HELPERS
+--========================================================
+
+local function getCharacter(player)
+	return player and player.Character
 end
 
-local function root(player)
-	local character = player and player.Character
-	return character and character:FindFirstChild("HumanoidRootPart")
-end
+local function getHumanoid(player)
+	local character = getCharacter(player)
 
-local function kill(player)
-	local hum = humanoid(player)
-
-	if hum then
-		hum.Health = 0
+	if not character then
+		return nil
 	end
+
+	return character:FindFirstChildOfClass("Humanoid")
 end
 
-local function respawn(player)
-	if player then
-		player:LoadCharacter()
+local function getRoot(player)
+	local character = getCharacter(player)
+
+	if not character then
+		return nil
 	end
+
+	return character:FindFirstChild("HumanoidRootPart")
 end
 
-local function freeze(player, enabled)
-	local r = root(player)
+--========================================================
+-- ADMIN ACTIONS
+--========================================================
 
-	if r then
-		r.Anchored = enabled
+local function killPlayer(target)
+	local humanoid = getHumanoid(target)
+
+	if humanoid then
+		humanoid.Health = 0
+		return true
 	end
+
+	return false
 end
 
-local function bring(sender, target)
-	local a = root(sender)
-	local b = root(target)
-
-	if a and b then
-		b.CFrame = a.CFrame * CFrame.new(0, 0, -5)
+local function respawnPlayer(target)
+	if target then
+		target:LoadCharacter()
+		return true
 	end
+
+	return false
+end
+
+local function freezePlayer(target)
+	local root = getRoot(target)
+
+	if root then
+		root.Anchored = true
+		return true
+	end
+
+	return false
+end
+
+local function unfreezePlayer(target)
+	local root = getRoot(target)
+
+	if root then
+		root.Anchored = false
+		return true
+	end
+
+	return false
+end
+
+local function bringPlayer(sender, target)
+	local senderRoot = getRoot(sender)
+	local targetRoot = getRoot(target)
+
+	if senderRoot and targetRoot then
+		targetRoot.CFrame =
+			senderRoot.CFrame * CFrame.new(0, 0, -5)
+
+		return true
+	end
+
+	return false
+end
+
+local function teleportToPlayer(sender, target)
+	local senderRoot = getRoot(sender)
+	local targetRoot = getRoot(target)
+
+	if senderRoot and targetRoot then
+		senderRoot.CFrame =
+			targetRoot.CFrame * CFrame.new(0, 0, -5)
+
+		return true
+	end
+
+	return false
 end
 
 local function teleportToSpawn(player)
-	local r = root(player)
+	local root = getRoot(player)
 
-	if not r then return end
+	if not root then
+		return false
+	end
 
-	local spawnLocation
+	for _, object in ipairs(workspace:GetDescendants()) do
+		if object:IsA("SpawnLocation") then
+			root.CFrame =
+				object.CFrame + Vector3.new(0, 5, 0)
 
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("SpawnLocation") then
-			spawnLocation = obj
-			break
+			return true
 		end
 	end
 
-	if spawnLocation then
-		r.CFrame =
-			spawnLocation.CFrame + Vector3.new(0, 4, 0)
-	end
+	return false
 end
+
+--========================================================
+-- COMMAND SYSTEM
+--========================================================
 
 local function executeCommand(sender, text)
 	if not isAdmin(sender) then
 		return
 	end
 
+	text = tostring(text or "")
+
+	if text == "" then
+		return
+	end
+
 	local args = string.split(text, " ")
-	local cmd = string.lower(args[1] or "")
-	local target = findPlayer(args[2])
+	local command = string.lower(args[1] or "")
+	local targetName = args[2]
 
-	if cmd == ";kill" and target then
+	local target = findPlayer(targetName)
 
-		kill(target)
+	if command == ";kill" then
 
-	elseif cmd == ";kick" and target and target ~= sender then
-
-		target:Kick(
-			"Removed by the game administrator."
-		)
-
-	elseif cmd == ";respawn" and target then
-
-		respawn(target)
-
-	elseif cmd == ";bring" and target then
-
-		bring(sender, target)
-
-	elseif cmd == ";freeze" and target then
-
-		freeze(target, true)
-
-	elseif cmd == ";unfreeze" and target then
-
-		freeze(target, false)
-
-	elseif cmd == ";tp" and target then
-
-		local senderRoot = root(sender)
-		local targetRoot = root(target)
-
-		if senderRoot and targetRoot then
-			senderRoot.CFrame =
-				targetRoot.CFrame *
-				CFrame.new(0, 0, -5)
+		if target then
+			killPlayer(target)
 		end
 
-	elseif cmd == ";spawn" then
+	elseif command == ";kick" then
+
+		if target and target ~= sender then
+			target:Kick("Removed by game administrator.")
+		end
+
+	elseif command == ";respawn" then
+
+		if target then
+			respawnPlayer(target)
+		end
+
+	elseif command == ";tp" then
+
+		if target then
+			teleportToPlayer(sender, target)
+		end
+
+	elseif command == ";bring" then
+
+		if target then
+			bringPlayer(sender, target)
+		end
+
+	elseif command == ";freeze" then
+
+		if target then
+			freezePlayer(target)
+		end
+
+	elseif command == ";unfreeze" then
+
+		if target then
+			unfreezePlayer(target)
+		end
+
+	elseif command == ";spawn" then
 
 		teleportToSpawn(sender)
 	end
 end
+
+--========================================================
+-- REMOTE HANDLER
+--========================================================
 
 Remote.OnServerEvent:Connect(function(player, action, data)
 
@@ -164,987 +266,1552 @@ Remote.OnServerEvent:Connect(function(player, action, data)
 			isAdmin(player)
 		)
 
-	elseif action == "Command" then
+		return
+	end
+
+	if action == "Command" then
 
 		executeCommand(
 			player,
 			tostring(data or "")
 		)
+
+		return
 	end
 end)
 
-print("[PHHuyHub V3] Server Ready")
---==================================================
--- PHHUYHUB V3 | PART 1/2
+--========================================================
+-- PLAYER JOIN
+--========================================================
+
+Players.PlayerAdded:Connect(function(player)
+
+	task.delay(1, function()
+
+		if player.Parent then
+			Remote:FireClient(
+				player,
+				"AdminStatus",
+				isAdmin(player)
+			)
+		end
+
+	end)
+
+end)
+
+print("======================================")
+print(" PHHUYHUB V3 SERVER ONLINE")
+print(" Remote:", REMOTE_NAME)
+print(" Admin ID:", 11645467051)
+print("======================================")
+--========================================================
+-- PHHUYHUB V3 - CLIENT
 -- Roblox Studio / Own Game
---==================================================
+--========================================================
 
-local Players=game:GetService("Players")
-local Rep=game:GetService("ReplicatedStorage")
-local UIS=game:GetService("UserInputService")
-local Run=game:GetService("RunService")
-local Lighting=game:GetService("Lighting")
-local Stats=game:GetService("Stats")
+--========================================================
+-- SERVICES
+--========================================================
 
-local LP=Players.LocalPlayer
-local PG=LP:WaitForChild("PlayerGui")
-local Remote=Rep:WaitForChild("PHHuyHub_V3")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local Stats = game:GetService("Stats")
 
-local old=PG:FindFirstChild("PHHuyHub_V3")
-if old then old:Destroy() end
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local S={
-	PlayerESP=true,Name=true,Health=true,Tracer=true,
-	Box=true,Skeleton=true,NPC=false,Item=false,Monster=false,
-	Speed=true,Jump=true,Fly=true,NoClip=false,InfJump=false,
-	LowGraphics=false,HighFPS=false,
-	Stealth=false,HideName=false,HideEffects=false,
-	Animation=true
+--========================================================
+-- REMOTE
+--========================================================
+
+local Remote = ReplicatedStorage:WaitForChild(
+	"PHHuyHub_V3",
+	10
+)
+
+if not Remote then
+	warn("PHHuyHub V3: RemoteEvent not found")
+	return
+end
+
+--========================================================
+-- CONFIG
+--========================================================
+
+local Config = {
+	Speed = 16,
+	Jump = 50,
+
+	Fly = false,
+	NoClip = false,
+	InfiniteJump = false,
+
+	PlayerESP = false,
+	NPCESP = false,
+	MonsterESP = false,
+	ItemESP = false,
+
+	HighFPS = false,
+	HideEffects = false,
+
+	Stealth = false,
+
+	UIVisible = true,
+	UIScale = 1,
+	Theme = "CYBER",
 }
 
-local V={
-	Speed=32,
-	Jump=70,
-	FlySpeed=55,
-	Distance=1000
+--========================================================
+-- THEME
+--========================================================
+
+local Themes = {
+	CYBER = {
+		Background = Color3.fromRGB(7, 9, 15),
+		Panel = Color3.fromRGB(14, 18, 29),
+		Card = Color3.fromRGB(17, 21, 34),
+		Accent = Color3.fromRGB(0, 162, 255),
+		Accent2 = Color3.fromRGB(0, 225, 255),
+		Text = Color3.fromRGB(240, 245, 255),
+		SubText = Color3.fromRGB(145, 160, 180),
+	},
+
+	MIDNIGHT = {
+		Background = Color3.fromRGB(5, 6, 10),
+		Panel = Color3.fromRGB(12, 13, 20),
+		Card = Color3.fromRGB(18, 19, 28),
+		Accent = Color3.fromRGB(90, 120, 255),
+		Accent2 = Color3.fromRGB(130, 150, 255),
+		Text = Color3.fromRGB(240, 240, 250),
+		SubText = Color3.fromRGB(145, 145, 165),
+	},
+
+	PURPLE = {
+		Background = Color3.fromRGB(9, 6, 15),
+		Panel = Color3.fromRGB(18, 12, 27),
+		Card = Color3.fromRGB(25, 17, 37),
+		Accent = Color3.fromRGB(150, 70, 255),
+		Accent2 = Color3.fromRGB(205, 110, 255),
+		Text = Color3.fromRGB(245, 240, 255),
+		SubText = Color3.fromRGB(165, 145, 180),
+	},
+
+	OCEAN = {
+		Background = Color3.fromRGB(4, 12, 17),
+		Panel = Color3.fromRGB(8, 21, 29),
+		Card = Color3.fromRGB(12, 30, 39),
+		Accent = Color3.fromRGB(0, 190, 180),
+		Accent2 = Color3.fromRGB(0, 235, 220),
+		Text = Color3.fromRGB(235, 255, 255),
+		SubText = Color3.fromRGB(135, 170, 175),
+	},
 }
 
-local COL={
-	BG=Color3.fromRGB(3,7,15),
-	PANEL=Color3.fromRGB(5,12,24),
-	CARD=Color3.fromRGB(8,18,35),
-	CARD2=Color3.fromRGB(10,25,46),
-	BLUE=Color3.fromRGB(0,175,255),
-	CYAN=Color3.fromRGB(0,235,255),
-	TEXT=Color3.fromRGB(235,248,255),
-	MUTED=Color3.fromRGB(115,155,180),
-	GREEN=Color3.fromRGB(0,235,160)
-}
+local Theme = Themes[Config.Theme]
 
-local function corner(x,r)
-	local c=Instance.new("UICorner")
-	c.CornerRadius=UDim.new(0,r)
-	c.Parent=x
+--========================================================
+-- CLEAN OLD UI
+--========================================================
+
+local old = PlayerGui:FindFirstChild("PHHuyHub_V3")
+
+if old then
+	old:Destroy()
 end
 
-local function stroke(x,t)
-	local s=Instance.new("UIStroke")
-	s.Color=COL.BLUE
-	s.Thickness=1
-	s.Transparency=t or .6
-	s.Parent=x
-end
+--========================================================
+-- HELPERS
+--========================================================
 
-local function txt(p,v,z,b)
-	local x=Instance.new("TextLabel")
-	x.BackgroundTransparency=1
-	x.Text=v
-	x.TextColor3=COL.TEXT
-	x.TextSize=z or 12
-	x.Font=b and Enum.Font.GothamBold or Enum.Font.Gotham
-	x.TextXAlignment=Enum.TextXAlignment.Left
-	x.Parent=p
-	return x
-end
+local function create(className, properties, parent)
+	local object = Instance.new(className)
 
-local GUI=Instance.new("ScreenGui")
-GUI.Name="PHHuyHub_V3"
-GUI.ResetOnSpawn=false
-GUI.IgnoreGuiInset=true
-GUI.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
-GUI.Parent=PG
-
---==================================================
--- FLOATING BUTTON
---==================================================
-
-local Float=Instance.new("TextButton")
-Float.Size=UDim2.fromOffset(62,62)
-Float.Position=UDim2.new(0,15,.5,-31)
-Float.BackgroundColor3=COL.PANEL
-Float.Text="PH"
-Float.TextColor3=COL.CYAN
-Float.TextSize=21
-Float.Font=Enum.Font.GothamBlack
-Float.AutoButtonColor=false
-Float.Parent=GUI
-corner(Float,22)
-stroke(Float,.1)
-
---==================================================
--- MAIN
---==================================================
-
-local Main=Instance.new("Frame")
-Main.AnchorPoint=Vector2.new(.5,.5)
-Main.Position=UDim2.fromScale(.5,.5)
-Main.Size=UDim2.fromScale(.92,.84)
-Main.BackgroundColor3=COL.BG
-Main.BorderSizePixel=0
-Main.Parent=GUI
-corner(Main,18)
-stroke(Main,.08)
-
---==================================================
--- HEADER
---==================================================
-
-local Header=Instance.new("Frame")
-Header.Size=UDim2.new(1,0,0,66)
-Header.BackgroundColor3=COL.PANEL
-Header.BorderSizePixel=0
-Header.Parent=Main
-corner(Header,18)
-
-local Logo=txt(Header,"PHHuyHub",25,true)
-Logo.Position=UDim2.fromOffset(20,7)
-Logo.Size=UDim2.fromOffset(300,30)
-Logo.TextColor3=COL.CYAN
-
-local Sub=txt(Header,"PLAY  •  FARM  •  DOMINATE",9,true)
-Sub.Position=UDim2.fromOffset(22,40)
-Sub.Size=UDim2.fromOffset(250,16)
-Sub.TextColor3=COL.MUTED
-
-local Stat=Instance.new("Frame")
-Stat.AnchorPoint=Vector2.new(1,0)
-Stat.Position=UDim2.new(1,-100,0,10)
-Stat.Size=UDim2.fromOffset(205,45)
-Stat.BackgroundColor3=COL.CARD
-Stat.Parent=Header
-corner(Stat,9)
-stroke(Stat,.75)
-
-local FPS=txt(Stat,"FPS: --",10,true)
-FPS.Position=UDim2.fromOffset(10,5)
-FPS.Size=UDim2.fromOffset(85,17)
-FPS.TextColor3=COL.GREEN
-
-local Ping=txt(Stat,"Ping: --",10,true)
-Ping.Position=UDim2.fromOffset(10,24)
-Ping.Size=UDim2.fromOffset(85,17)
-Ping.TextColor3=COL.CYAN
-
-local Count=txt(Stat,"Player: --",10,true)
-Count.Position=UDim2.fromOffset(100,14)
-Count.Size=UDim2.fromOffset(95,18)
-
-local Min=Instance.new("TextButton")
-Min.Size=UDim2.fromOffset(42,42)
-Min.Position=UDim2.new(1,-94,0,12)
-Min.BackgroundColor3=COL.CARD
-Min.Text="—"
-Min.TextColor3=COL.TEXT
-Min.TextSize=20
-Min.Parent=Header
-corner(Min,10)
-stroke(Min,.7)
-
-local Close=Instance.new("TextButton")
-Close.Size=UDim2.fromOffset(42,42)
-Close.Position=UDim2.new(1,-48,0,12)
-Close.BackgroundColor3=COL.CARD
-Close.Text="×"
-Close.TextColor3=COL.TEXT
-Close.TextSize=25
-Close.Parent=Header
-corner(Close,10)
-stroke(Close,.7)
-
---==================================================
--- SIDEBAR
---==================================================
-
-local Side=Instance.new("Frame")
-Side.Position=UDim2.new(0,0,0,66)
-Side.Size=UDim2.new(0,155,1,-66)
-Side.BackgroundColor3=COL.PANEL
-Side.BorderSizePixel=0
-Side.Parent=Main
-
-local SP=Instance.new("UIPadding")
-SP.PaddingTop=UDim.new(0,12)
-SP.PaddingLeft=UDim.new(0,10)
-SP.PaddingRight=UDim.new(0,10)
-SP.Parent=Side
-
-local SL=Instance.new("UIListLayout")
-SL.Padding=UDim.new(0,7)
-SL.Parent=Side
-
-local Content=Instance.new("Frame")
-Content.Position=UDim2.new(0,155,0,66)
-Content.Size=UDim2.new(1,-155,1,-66)
-Content.BackgroundTransparency=1
-Content.Parent=Main
-
-local Pages={}
-local Tabs={}
-
-local TabData={
-	{"ESP","⌂"},
-	{"PLAYER","●"},
-	{"ADMIN","♛"},
-	{"PERFORMANCE","▥"},
-	{"STEALTH","◉"},
-	{"SETTINGS","⚙"}
-}
-
-local function page(name)
-	local p=Instance.new("ScrollingFrame")
-	p.Name=name
-	p.Size=UDim2.fromScale(1,1)
-	p.BackgroundTransparency=1
-	p.BorderSizePixel=0
-	p.ScrollBarThickness=2
-	p.ScrollBarImageColor3=COL.BLUE
-	p.AutomaticCanvasSize=Enum.AutomaticSize.Y
-	p.CanvasSize=UDim2.new()
-	p.Visible=false
-	p.Parent=Content
-
-	local pad=Instance.new("UIPadding")
-	pad.PaddingTop=UDim.new(0,14)
-	pad.PaddingBottom=UDim.new(0,20)
-	pad.PaddingLeft=UDim.new(0,14)
-	pad.PaddingRight=UDim.new(0,14)
-	pad.Parent=p
-
-	local list=Instance.new("UIListLayout")
-	list.Padding=UDim.new(0,8)
-	list.Parent=p
-
-	Pages[name]=p
-	return p
-end
-
-for _,d in ipairs(TabData) do
-	page(d[1])
-
-	local b=Instance.new("TextButton")
-	b.Name=d[1]
-	b.Size=UDim2.new(1,0,0,45)
-	b.BackgroundColor3=COL.CARD
-	b.Text=d[2].."   "..d[1]
-	b.TextColor3=COL.TEXT
-	b.TextSize=12
-	b.Font=Enum.Font.GothamBold
-	b.AutoButtonColor=false
-	b.Parent=Side
-	corner(b,10)
-	stroke(b,.82)
-	Tabs[d[1]]=b
-
-	b.Activated:Connect(function()
-		for n,p in pairs(Pages) do
-			p.Visible=n==d[1]
-		end
-		for n,t in pairs(Tabs) do
-			t.BackgroundColor3=
-				n==d[1]
-				and Color3.fromRGB(0,75,110)
-				or COL.CARD
-		end
-	end)
-end
-
---==================================================
--- CARD
---==================================================
-
-local function card(p,title,sub)
-	local c=Instance.new("Frame")
-	c.Size=UDim2.new(1,0,0,66)
-	c.BackgroundColor3=COL.CARD
-	c.Parent=p
-	corner(c,11)
-	stroke(c,.72)
-
-	local a=txt(c,title,16,true)
-	a.Position=UDim2.fromOffset(15,8)
-	a.Size=UDim2.new(1,-30,0,24)
-	a.TextColor3=COL.CYAN
-
-	local b=txt(c,sub or "",10)
-	b.Position=UDim2.fromOffset(16,36)
-	b.Size=UDim2.new(1,-30,0,18)
-	b.TextColor3=COL.MUTED
-
-	return c
-end
-
---==================================================
--- TOGGLE
---==================================================
-
-local function toggle(p,name,key,callback)
-
-	local r=Instance.new("TextButton")
-	r.Size=UDim2.new(1,0,0,40)
-	r.BackgroundColor3=COL.CARD2
-	r.Text=""
-	r.AutoButtonColor=false
-	r.Parent=p
-	corner(r,8)
-
-	local t=txt(r,name,11,true)
-	t.Position=UDim2.fromOffset(12,0)
-	t.Size=UDim2.new(1,-70,1,0)
-
-	local sw=Instance.new("Frame")
-	sw.AnchorPoint=Vector2.new(1,.5)
-	sw.Position=UDim2.new(1,-10,.5,0)
-	sw.Size=UDim2.fromOffset(43,22)
-	sw.BackgroundColor3=Color3.fromRGB(25,43,61)
-	sw.Parent=r
-	corner(sw,12)
-
-	local dot=Instance.new("Frame")
-	dot.Size=UDim2.fromOffset(16,16)
-	dot.Position=UDim2.fromOffset(3,3)
-	dot.BackgroundColor3=COL.MUTED
-	dot.Parent=sw
-	corner(dot,10)
-
-	local function update()
-		if S[key] then
-			sw.BackgroundColor3=Color3.fromRGB(0,105,150)
-			dot.Position=UDim2.new(1,-19,0,3)
-			dot.BackgroundColor3=COL.CYAN
-		else
-			sw.BackgroundColor3=Color3.fromRGB(25,43,61)
-			dot.Position=UDim2.fromOffset(3,3)
-			dot.BackgroundColor3=COL.MUTED
-		end
+	for property, value in pairs(properties or {}) do
+		object[property] = value
 	end
 
-	r.Activated:Connect(function()
-		S[key]=not S[key]
-		update()
-		if callback then callback(S[key]) end
-	end)
+	object.Parent = parent
 
-	update()
-	return r
+	return object
 end
 
---==================================================
--- SLIDER
---==================================================
+local function corner(object, radius)
+	return create("UICorner", {
+		CornerRadius = UDim.new(0, radius or 8),
+	}, object)
+end
 
-local function slider(p,name,key,min,max)
+local function stroke(object, color, transparency)
+	return create("UIStroke", {
+		Color = color or Theme.Accent,
+		Transparency = transparency or 0.65,
+		Thickness = 1,
+	}, object)
+end
 
-	local h=Instance.new("Frame")
-	h.Size=UDim2.new(1,0,0,52)
-	h.BackgroundTransparency=1
-	h.Parent=p
+local function tween(object, properties, duration)
+	local info = TweenInfo.new(
+		duration or 0.2,
+		Enum.EasingStyle.Quart,
+		Enum.EasingDirection.Out
+	)
 
-	local n=txt(h,name,10)
-	n.Size=UDim2.new(.7,0,0,18)
+	TweenService:Create(
+		object,
+		info,
+		properties
+	):Play()
+end
 
-	local val=txt(h,tostring(V[key]),10,true)
-	val.AnchorPoint=Vector2.new(1,0)
-	val.Position=UDim2.new(1,0,0,0)
-	val.Size=UDim2.fromOffset(50,18)
-	val.TextXAlignment=Enum.TextXAlignment.Right
+--========================================================
+-- SCREEN GUI
+--========================================================
 
-	local bar=Instance.new("Frame")
-	bar.Position=UDim2.new(0,0,0,29)
-	bar.Size=UDim2.new(1,0,0,5)
-	bar.BackgroundColor3=Color3.fromRGB(25,47,70)
-	bar.Parent=h
-	corner(bar,5)
+local ScreenGui = create("ScreenGui", {
+	Name = "PHHuyHub_V3",
+	ResetOnSpawn = false,
+	IgnoreGuiInset = true,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = 999,
+}, PlayerGui)
 
-	local fill=Instance.new("Frame")
-	fill.BackgroundColor3=COL.BLUE
-	fill.Parent=bar
-	corner(fill,5)
+--========================================================
+-- FLOAT BUTTON
+--========================================================
 
-	local knob=Instance.new("Frame")
-	knob.Size=UDim2.fromOffset(11,11)
-	knob.AnchorPoint=Vector2.new(.5,.5)
-	knob.BackgroundColor3=COL.CYAN
-	knob.Parent=bar
-	corner(knob,8)
+local Float = create("TextButton", {
+	Name = "PHButton",
+	Size = UDim2.fromOffset(56, 56),
+	Position = UDim2.new(0, 18, 0.5, -28),
+	BackgroundColor3 = Theme.Panel,
+	Text = "PH",
+	TextColor3 = Theme.Text,
+	TextSize = 19,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+}, ScreenGui)
 
-	local function update()
-		local x=(V[key]-min)/(max-min)
-		fill.Size=UDim2.new(x,0,1,0)
-		knob.Position=UDim2.new(x,0,.5,0)
-		val.Text=tostring(V[key])
+corner(Float, 28)
+stroke(Float, Theme.Accent, 0.25)
+
+--========================================================
+-- MAIN WINDOW
+--========================================================
+
+local Main = create("Frame", {
+	Name = "Main",
+	Size = UDim2.new(0, 700, 0, 430),
+	Position = UDim2.new(0.5, -350, 0.5, -215),
+	BackgroundColor3 = Theme.Background,
+	BorderSizePixel = 0,
+}, ScreenGui)
+
+corner(Main, 14)
+stroke(Main, Theme.Accent, 0.35)
+
+--========================================================
+-- RESPONSIVE
+--========================================================
+
+local function updateResponsive()
+
+	local camera = workspace.CurrentCamera
+
+	if not camera then
+		return
 	end
 
-	local drag=false
-
-	bar.InputBegan:Connect(function(i)
-		if i.UserInputType==Enum.UserInputType.MouseButton1
-			or i.UserInputType==Enum.UserInputType.Touch then
-			drag=true
-		end
-	end)
-
-	UIS.InputChanged:Connect(function(i)
-		if not drag then return end
-		if i.UserInputType==Enum.UserInputType.MouseMovement
-			or i.UserInputType==Enum.UserInputType.Touch then
-
-			local q=math.clamp(
-				(i.Position.X-bar.AbsolutePosition.X)/
-				bar.AbsoluteSize.X,0,1)
-
-			V[key]=math.floor(min+(max-min)*q+.5)
-			update()
-		end
-	end)
-
-	UIS.InputEnded:Connect(function(i)
-		if i.UserInputType==Enum.UserInputType.MouseButton1
-			or i.UserInputType==Enum.UserInputType.Touch then
-			drag=false
-		end
-	end)
-
-	update()
-end
-
---==================================================
--- ESP PAGE
---==================================================
-
-do
-	local p=Pages.ESP
-
-	card(p,"◎  ESP","Hiển thị người chơi, NPC, vật phẩm...")
-
-	toggle(p,"Player ESP","PlayerESP")
-	toggle(p,"Tên + Khoảng cách","Name")
-	toggle(p,"Hiển thị HP","Health")
-	toggle(p,"Đường kẻ (Tracer)","Tracer")
-	toggle(p,"Khung (Box)","Box")
-	toggle(p,"Skeleton (Xương)","Skeleton")
-
-	slider(p,"Khoảng cách tối đa","Distance",100,3000)
-
-	toggle(p,"ESP NPC","NPC")
-	toggle(p,"ESP Vật phẩm","Item")
-	toggle(p,"ESP Quái","Monster")
-end
-
---==================================================
--- PLAYER PAGE
---==================================================
-
-do
-	local p=Pages.PLAYER
-
-	card(p,"●  PLAYER","Tăng tốc, nhảy, noclip...")
-
-	toggle(p,"Speed","Speed",function(on)
-		local c=LP.Character
-		local h=c and c:FindFirstChildOfClass("Humanoid")
-		if h then h.WalkSpeed=on and V.Speed or 16 end
-	end)
-
-	slider(p,"Speed Value","Speed",16,100)
-
-	toggle(p,"Jump","Jump",function(on)
-		local c=LP.Character
-		local h=c and c:FindFirstChildOfClass("Humanoid")
-		if h then h.JumpPower=on and V.Jump or 50 end
-	end)
-
-	slider(p,"Jump Value","Jump",50,150)
-
-	toggle(p,"Fly","Fly")
-	slider(p,"Fly Speed","FlySpeed",20,120)
-
-	toggle(p,"NoClip","NoClip")
-	toggle(p,"Infinite Jump","InfJump")
-end
-
---==================================================
--- PLACEHOLDER PAGES
--- PART 2 FILLS THESE
---==================================================
-
-card(Pages.ADMIN,"♛  ADMIN SERVER","Lệnh quản trị server")
-card(Pages.PERFORMANCE,"▥  PERFORMANCE","Hiệu suất & thông tin hệ thống")
-card(Pages.STEALTH,"◉  STEALTH TEST","Kiểm thử visibility")
-card(Pages.SETTINGS,"⚙  SETTINGS","Cài đặt & tùy chỉnh")
-
-Pages.ESP.Visible=true
-Tabs.ESP.BackgroundColor3=Color3.fromRGB(0,75,110)
-
-print("[PHHuyHub V3] PART 1 READY")
---==================================================
--- PHHUYHUB V3 | PART 2/2
---==================================================
-
---==================================================
--- ADMIN
---==================================================
-
-do
-	local p=Pages.ADMIN
-
-	for _,x in ipairs(p:GetChildren()) do
-		if x:IsA("Frame") then x:Destroy() end
-	end
-
-	card(p,"♛  ADMIN SERVER","Lệnh quản trị & công cụ server")
-
-	local Status=txt(p,"● Đang kiểm tra quyền...",11,true)
-	Status.Size=UDim2.new(1,0,0,25)
-	Status.TextColor3=COL.MUTED
-
-	local Box=Instance.new("TextBox")
-	Box.Size=UDim2.new(1,0,0,45)
-	Box.BackgroundColor3=COL.CARD
-	Box.TextColor3=COL.TEXT
-	Box.PlaceholderColor3=COL.MUTED
-	Box.PlaceholderText="Nhập lệnh..."
-	Box.Text=""
-	Box.TextSize=12
-	Box.Font=Enum.Font.Code
-	Box.ClearTextOnFocus=false
-	Box.Parent=p
-	corner(Box,9)
-	stroke(Box,.72)
-
-	local Send=Instance.new("TextButton")
-	Send.Size=UDim2.new(1,0,0,45)
-	Send.BackgroundColor3=Color3.fromRGB(0,70,105)
-	Send.Text="➤  GỬI LỆNH SERVER"
-	Send.TextColor3=COL.TEXT
-	Send.TextSize=12
-	Send.Font=Enum.Font.GothamBold
-	Send.Parent=p
-	corner(Send,9)
-	stroke(Send,.5)
-
-	Send.Activated:Connect(function()
-		if Box.Text~="" then
-			Remote:FireServer("Command",Box.Text)
-			Box.Text=""
-		end
-	end)
-
-	local Help=txt(p,
-		";kill Name\n"..
-		";kick Name\n"..
-		";respawn Name\n"..
-		";tp Name\n"..
-		";bring Name\n"..
-		";freeze Name\n"..
-		";unfreeze Name\n"..
-		";spawn",
-		11)
-
-	Help.Size=UDim2.new(1,0,0,170)
-	Help.TextColor3=COL.MUTED
-
-	Remote.OnClientEvent:Connect(function(action,value)
-		if action=="AdminStatus" then
-			if value then
-				Status.Text="● ADMIN AUTHORIZED"
-				Status.TextColor3=COL.GREEN
-				Logo.Text="PHHuyHub  •  ADMIN"
-			else
-				Status.Text="● USER"
-				Status.TextColor3=COL.MUTED
-			end
-		end
-	end)
-
-	Remote:FireServer("AdminCheck")
-end
-
---==================================================
--- PERFORMANCE
---==================================================
-
-do
-	local p=Pages.PERFORMANCE
-
-	for _,x in ipairs(p:GetChildren()) do
-		if x:IsA("Frame") then x:Destroy() end
-	end
-
-	card(p,"▥  PERFORMANCE","Hiệu suất & thông tin hệ thống")
-
-	local BigFPS=txt(p,"FPS     --",17,true)
-	BigFPS.Size=UDim2.new(1,0,0,32)
-	BigFPS.TextColor3=COL.GREEN
-
-	local BigPing=txt(p,"Ping    --",12,true)
-	BigPing.Size=UDim2.new(1,0,0,28)
-	BigPing.TextColor3=COL.CYAN
-
-	toggle(p,"High FPS","HighFPS")
-
-	toggle(p,"Low Graphics","LowGraphics",function(on)
-		Lighting.GlobalShadows=not on
-		if on then Lighting.Brightness=1 end
-	end)
-
-	local Mode=txt(p,"Performance Mode: ACTIVE",11)
-	Mode.Size=UDim2.new(1,0,0,30)
-	Mode.TextColor3=COL.MUTED
-
-	local frames=0
-	local start=os.clock()
-
-	Run.RenderStepped:Connect(function()
-		frames+=1
-
-		if os.clock()-start>=1 then
-			local f=math.floor(frames)
-
-			FPS.Text="FPS: "..f
-			BigFPS.Text="FPS     "..f
-			Count.Text="Player: "..#Players:GetPlayers()
-
-			frames=0
-			start=os.clock()
-		end
-	end)
-
-	task.spawn(function()
-		while GUI.Parent do
-			task.wait(1)
-
-			local ok,v=pcall(function()
-				return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
-			end)
-
-			if ok then
-				local q=math.floor(v)
-
-				Ping.Text="Ping: "..q.."ms"
-				BigPing.Text="Ping    "..q.."ms"
-			end
-		end
-	end)
-end
-
---==================================================
--- STEALTH
---==================================================
-
-do
-	local p=Pages.STEALTH
-
-	for _,x in ipairs(p:GetChildren()) do
-		if x:IsA("Frame") then x:Destroy() end
-	end
-
-	card(p,"◉  STEALTH TEST",
-		"Kiểm thử visibility phía client")
-
-	local function visibility(on)
-
-		local c=LP.Character
-		if not c then return end
-
-		for _,x in ipairs(c:GetDescendants()) do
-			if x:IsA("BasePart") then
-				x.LocalTransparencyModifier=on and 1 or 0
-			elseif x:IsA("Decal") then
-				x.Transparency=on and 1 or 0
-			end
-		end
-	end
-
-	toggle(p,"Stealth (Local Test)","Stealth",visibility)
-
-	toggle(p,"Ẩn tên","HideName",function(on)
-		local c=LP.Character
-		local h=c and c:FindFirstChildOfClass("Humanoid")
-
-		if h then
-			h.DisplayDistanceType=
-				on
-				and Enum.HumanoidDisplayDistanceType.None
-				or Enum.HumanoidDisplayDistanceType.Viewer
-		end
-	end)
-
-	toggle(p,"Ẩn hiệu ứng","HideEffects")
-
-	local info=txt(p,
-		"Stealth là kiểm thử visibility phía client\n"..
-		"trong game Roblox của bạn.",
-		11)
-
-	info.Size=UDim2.new(1,0,0,55)
-	info.TextColor3=COL.MUTED
-end
-
---==================================================
--- SETTINGS
---==================================================
-
-do
-	local p=Pages.SETTINGS
-
-	for _,x in ipairs(p:GetChildren()) do
-		if x:IsA("Frame") then x:Destroy() end
-	end
-
-	card(p,"⚙  SETTINGS","Cài đặt & tùy chỉnh")
-
-	toggle(p,"UI Animation","Animation")
-
-	local theme=txt(p,"Theme       NEON BLUE",12,true)
-	theme.Size=UDim2.new(1,0,0,35)
-	theme.TextColor3=COL.CYAN
-
-	local lang=txt(p,"Language    Tiếng Việt",12,true)
-	lang.Size=UDim2.new(1,0,0,35)
-
-	local device=txt(p,"Device       Mobile • Tablet • PC",11)
-	device.Size=UDim2.new(1,0,0,35)
-	device.TextColor3=COL.MUTED
-
-	local Reset=Instance.new("TextButton")
-	Reset.Size=UDim2.new(1,0,0,45)
-	Reset.BackgroundColor3=COL.CARD
-	Reset.Text="↻  RESET CÀI ĐẶT"
-	Reset.TextColor3=COL.CYAN
-	Reset.TextSize=12
-	Reset.Font=Enum.Font.GothamBold
-	Reset.Parent=p
-	corner(Reset,9)
-	stroke(Reset,.7)
-
-	Reset.Activated:Connect(function()
-		S.Speed=false
-		S.Jump=false
-		S.Fly=false
-		S.NoClip=false
-		S.InfJump=false
-
-		local c=LP.Character
-		local h=c and c:FindFirstChildOfClass("Humanoid")
-
-		if h then
-			h.WalkSpeed=16
-			h.JumpPower=50
-		end
-	end)
-end
-
---==================================================
--- OPEN / CLOSE
---==================================================
-
-local Opened=true
-
-Float.Activated:Connect(function()
-	Opened=not Opened
-	Main.Visible=Opened
-end)
-
-Close.Activated:Connect(function()
-	Opened=false
-	Main.Visible=false
-end)
-
-Min.Activated:Connect(function()
-	Main.Visible=false
-end)
-
---==================================================
--- DRAG MOBILE / PC
---==================================================
-
-local dragging=false
-local dragStart
-local startPos
-
-Header.InputBegan:Connect(function(i)
-	if i.UserInputType==Enum.UserInputType.MouseButton1
-		or i.UserInputType==Enum.UserInputType.Touch then
-
-		dragging=true
-		dragStart=i.Position
-		startPos=Main.Position
-	end
-end)
-
-UIS.InputChanged:Connect(function(i)
-	if not dragging then return end
-
-	if i.UserInputType==Enum.UserInputType.MouseMovement
-		or i.UserInputType==Enum.UserInputType.Touch then
-
-		local d=i.Position-dragStart
-
-		Main.Position=UDim2.new(
-			startPos.X.Scale,
-			startPos.X.Offset+d.X,
-			startPos.Y.Scale,
-			startPos.Y.Offset+d.Y
+	local viewport = camera.ViewportSize
+
+	if viewport.X < 650 then
+
+		Main.Size = UDim2.new(
+			1,
+			-20,
+			0,
+			math.min(520, viewport.Y - 30)
 		)
-	end
-end)
 
-UIS.InputEnded:Connect(function(i)
-	if i.UserInputType==Enum.UserInputType.MouseButton1
-		or i.UserInputType==Enum.UserInputType.Touch then
-		dragging=false
-	end
-end)
+		Main.Position = UDim2.new(
+			0.5,
+			0,
+			0.5,
+			0
+		)
 
---==================================================
--- MOBILE RESPONSIVE
---==================================================
-
-local function Layout()
-
-	local cam=workspace.CurrentCamera
-	if not cam then return end
-
-	local w=cam.ViewportSize.X
-
-	if w<=700 then
-
-		Main.Size=UDim2.fromScale(.97,.93)
-
-		Side.Size=UDim2.new(0,58,1,-66)
-
-		Content.Position=UDim2.new(0,58,0,66)
-
-		Content.Size=UDim2.new(1,-58,1,-66)
-
-		Sub.Visible=false
-		Stat.Visible=false
-
-		for _,d in ipairs(TabData) do
-			Tabs[d[1]].Text=d[2]
-			Tabs[d[1]].TextSize=17
-		end
-
-	elseif w<=1000 then
-
-		Main.Size=UDim2.fromScale(.95,.89)
-
-		Side.Size=UDim2.new(0,100,1,-66)
-
-		Content.Position=UDim2.new(0,100,0,66)
-
-		Content.Size=UDim2.new(1,-100,1,-66)
+		Main.AnchorPoint = Vector2.new(0.5, 0.5)
 
 	else
 
-		Main.Size=UDim2.fromScale(.92,.84)
+		Main.Size = UDim2.fromOffset(700, 430)
 
-		Side.Size=UDim2.new(0,155,1,-66)
+		Main.Position = UDim2.new(
+			0.5,
+			0,
+			0.5,
+			0
+		)
 
-		Content.Position=UDim2.new(0,155,0,66)
+		Main.AnchorPoint = Vector2.new(0.5, 0.5)
+	end
+end
 
-		Content.Size=UDim2.new(1,-155,1,-66)
+updateResponsive()
 
-		Sub.Visible=true
-		Stat.Visible=true
+workspace.CurrentCamera:GetPropertyChangedSignal(
+	"ViewportSize"
+):Connect(updateResponsive)
 
-		for _,d in ipairs(TabData) do
-			Tabs[d[1]].Text=d[2].."   "..d[1]
-			Tabs[d[1]].TextSize=12
+--========================================================
+-- HEADER
+--========================================================
+
+local Header = create("Frame", {
+	Size = UDim2.new(1, 0, 0, 55),
+	BackgroundTransparency = 1,
+}, Main)
+
+local Title = create("TextLabel", {
+	Position = UDim2.fromOffset(18, 7),
+	Size = UDim2.new(1, -130, 0, 25),
+	BackgroundTransparency = 1,
+	Text = "PHHUYHUB V3",
+	TextColor3 = Theme.Text,
+	TextSize = 19,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, Header)
+
+local Subtitle = create("TextLabel", {
+	Position = UDim2.fromOffset(19, 31),
+	Size = UDim2.new(1, -130, 0, 17),
+	BackgroundTransparency = 1,
+	Text = "PHONGHUY36  •  PRIVATE TEST",
+	TextColor3 = Theme.SubText,
+	TextSize = 10,
+	Font = Enum.Font.Gotham,
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, Header)
+
+local Min = create("TextButton", {
+	Position = UDim2.new(1, -80, 0, 13),
+	Size = UDim2.fromOffset(28, 28),
+	BackgroundColor3 = Theme.Card,
+	Text = "—",
+	TextColor3 = Theme.Text,
+	TextSize = 17,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+}, Header)
+
+corner(Min, 8)
+
+local Close = create("TextButton", {
+	Position = UDim2.new(1, -45, 0, 13),
+	Size = UDim2.fromOffset(28, 28),
+	BackgroundColor3 = Theme.Card,
+	Text = "×",
+	TextColor3 = Theme.Text,
+	TextSize = 20,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+}, Header)
+
+corner(Close, 8)
+
+--========================================================
+-- DRAG
+--========================================================
+
+local dragging = false
+local dragStart
+local startPosition
+
+Header.InputBegan:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		dragging = true
+		dragStart = input.Position
+		startPosition = Main.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+
+	if not dragging then
+		return
+	end
+
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement
+		and input.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+
+	local delta = input.Position - dragStart
+
+	Main.Position = UDim2.new(
+		startPosition.X.Scale,
+		startPosition.X.Offset + delta.X,
+		startPosition.Y.Scale,
+		startPosition.Y.Offset + delta.Y
+	)
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		dragging = false
+	end
+end)
+
+--========================================================
+-- SIDEBAR
+--========================================================
+
+local Sidebar = create("Frame", {
+	Position = UDim2.fromOffset(10, 65),
+	Size = UDim2.new(0, 145, 1, -75),
+	BackgroundColor3 = Theme.Panel,
+	BorderSizePixel = 0,
+}, Main)
+
+corner(Sidebar, 10)
+
+local SideLayout = create("UIListLayout", {
+	Padding = UDim.new(0, 6),
+	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	SortOrder = Enum.SortOrder.LayoutOrder,
+}, Sidebar)
+
+create("UIPadding", {
+	PaddingTop = UDim.new(0, 10),
+	PaddingBottom = UDim.new(0, 10),
+}, Sidebar)
+
+--========================================================
+-- CONTENT
+--========================================================
+
+local Content = create("Frame", {
+	Position = UDim2.fromOffset(165, 65),
+	Size = UDim2.new(1, -175, 1, -75),
+	BackgroundTransparency = 1,
+}, Main)
+
+--========================================================
+-- TABS
+--========================================================
+
+local Tabs = {}
+local Pages = {}
+
+local function createPage(name)
+
+	local page = create("ScrollingFrame", {
+		Name = name,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = Theme.Accent,
+		Visible = false,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	}, Content)
+
+	create("UIPadding", {
+		PaddingLeft = UDim.new(0, 5),
+		PaddingRight = UDim.new(0, 5),
+		PaddingBottom = UDim.new(0, 10),
+	}, page)
+
+	local layout = create("UIListLayout", {
+		Padding = UDim.new(0, 9),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, page)
+
+	Pages[name] = page
+
+	return page
+end
+
+local function createTab(name, order)
+
+	local button = create("TextButton", {
+		Size = UDim2.new(1, -18, 0, 39),
+		BackgroundColor3 = Theme.Card,
+		Text = name,
+		TextColor3 = Theme.SubText,
+		TextSize = 12,
+		Font = Enum.Font.GothamMedium,
+		AutoButtonColor = false,
+		LayoutOrder = order,
+	}, Sidebar)
+
+	corner(button, 8)
+
+	Tabs[name] = button
+
+	return button
+end
+
+local tabNames = {
+	"ESP",
+	"PLAYER",
+	"ADMIN",
+	"PERFORMANCE",
+	"STEALTH",
+	"SETTINGS",
+}
+
+for index, name in ipairs(tabNames) do
+	createTab(name, index)
+	createPage(name)
+end
+
+local function showPage(name)
+
+	for tabName, page in pairs(Pages) do
+		page.Visible = tabName == name
+	end
+
+	for tabName, button in pairs(Tabs) do
+
+		if tabName == name then
+			button.BackgroundColor3 = Theme.Accent
+			button.TextColor3 = Color3.new(1, 1, 1)
+		else
+			button.BackgroundColor3 = Theme.Card
+			button.TextColor3 = Theme.SubText
 		end
 	end
 end
 
-workspace.CurrentCamera:
-	GetPropertyChangedSignal("ViewportSize"):
-	Connect(Layout)
+for name, button in pairs(Tabs) do
+	button.Activated:Connect(function()
+		showPage(name)
+	end)
+end
 
-Layout()
+showPage("ESP")
 
---==================================================
--- NOCLIP
---==================================================
+--========================================================
+-- UI CARD
+--========================================================
 
-Run.Stepped:Connect(function()
+local function card(parent, title, description)
 
-	if not S.NoClip then return end
+	local frame = create("Frame", {
+		Size = UDim2.new(1, -5, 0, 80),
+		BackgroundColor3 = Theme.Card,
+		BorderSizePixel = 0,
+	}, parent)
 
-	local c=LP.Character
+	corner(frame, 10)
+	stroke(frame, Theme.Accent, 0.85)
 
-	if c then
-		for _,x in ipairs(c:GetDescendants()) do
-			if x:IsA("BasePart") then
-				x.CanCollide=false
+	local titleLabel = create("TextLabel", {
+		Position = UDim2.fromOffset(14, 9),
+		Size = UDim2.new(1, -28, 0, 20),
+		BackgroundTransparency = 1,
+		Text = title,
+		TextColor3 = Theme.Text,
+		TextSize = 13,
+		Font = Enum.Font.GothamBold,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, frame)
+
+	if description then
+
+		create("TextLabel", {
+			Position = UDim2.fromOffset(14, 31),
+			Size = UDim2.new(1, -28, 0, 35),
+			BackgroundTransparency = 1,
+			Text = description,
+			TextColor3 = Theme.SubText,
+			TextSize = 10,
+			Font = Enum.Font.Gotham,
+			TextWrapped = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Top,
+		}, frame)
+
+	end
+
+	return frame
+end
+
+--========================================================
+-- TOGGLE
+--========================================================
+
+local function toggle(parent, title, key, callback)
+
+	local frame = create("Frame", {
+		Size = UDim2.new(1, -5, 0, 48),
+		BackgroundColor3 = Theme.Card,
+		BorderSizePixel = 0,
+	}, parent)
+
+	corner(frame, 8)
+
+	local label = create("TextLabel", {
+		Position = UDim2.fromOffset(12, 0),
+		Size = UDim2.new(1, -75, 1, 0),
+		BackgroundTransparency = 1,
+		Text = title,
+		TextColor3 = Theme.Text,
+		TextSize = 12,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, frame)
+
+	local button = create("TextButton", {
+		Position = UDim2.new(1, -58, 0.5, -12),
+		Size = UDim2.fromOffset(46, 24),
+		BackgroundColor3 = Theme.Panel,
+		Text = "",
+		AutoButtonColor = false,
+	}, frame)
+
+	corner(button, 12)
+
+	local knob = create("Frame", {
+		Position = UDim2.fromOffset(3, 3),
+		Size = UDim2.fromOffset(18, 18),
+		BackgroundColor3 = Theme.SubText,
+		BorderSizePixel = 0,
+	}, button)
+
+	corner(knob, 9)
+
+	local function update()
+
+		local state = Config[key] == true
+
+		if state then
+			button.BackgroundColor3 = Theme.Accent
+			knob.Position = UDim2.new(1, -21, 0, 3)
+		else
+			button.BackgroundColor3 = Theme.Panel
+			knob.Position = UDim2.fromOffset(3, 3)
+		end
+
+		if callback then
+			callback(state)
+		end
+	end
+
+	button.Activated:Connect(function()
+		Config[key] = not Config[key]
+		update()
+	end)
+
+	update()
+
+	return frame
+end
+
+--========================================================
+-- SLIDER
+--========================================================
+
+local function slider(parent, title, key, minValue, maxValue)
+
+	local frame = create("Frame", {
+		Size = UDim2.new(1, -5, 0, 70),
+		BackgroundColor3 = Theme.Card,
+		BorderSizePixel = 0,
+	}, parent)
+
+	corner(frame, 8)
+
+	local label = create("TextLabel", {
+		Position = UDim2.fromOffset(12, 8),
+		Size = UDim2.new(1, -75, 0, 20),
+		BackgroundTransparency = 1,
+		Text = title,
+		TextColor3 = Theme.Text,
+		TextSize = 12,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, frame)
+
+	local valueLabel = create("TextLabel", {
+		Position = UDim2.new(1, -65, 0, 8),
+		Size = UDim2.fromOffset(52, 20),
+		BackgroundTransparency = 1,
+		Text = tostring(Config[key]),
+		TextColor3 = Theme.Accent2,
+		TextSize = 11,
+		Font = Enum.Font.GothamBold,
+		TextXAlignment = Enum.TextXAlignment.Right,
+	}, frame)
+
+	local bar = create("Frame", {
+		Position = UDim2.fromOffset(12, 40),
+		Size = UDim2.new(1, -24, 0, 7),
+		BackgroundColor3 = Theme.Panel,
+		BorderSizePixel = 0,
+	}, frame)
+
+	corner(bar, 5)
+
+	local fill = create("Frame", {
+		Size = UDim2.new(
+			(Config[key] - minValue) /
+			(maxValue - minValue),
+			0,
+			1,
+			0
+		),
+		BackgroundColor3 = Theme.Accent,
+		BorderSizePixel = 0,
+	}, bar)
+
+	corner(fill, 5)
+
+	local function setFromX(x)
+
+		local percent = math.clamp(
+			(x - bar.AbsolutePosition.X) /
+			bar.AbsoluteSize.X,
+			0,
+			1
+		)
+
+		local value =
+			minValue +
+			(maxValue - minValue) * percent
+
+		value = math.floor(value + 0.5)
+
+		Config[key] = value
+
+		valueLabel.Text = tostring(value)
+
+		fill.Size = UDim2.new(percent, 0, 1, 0)
+	end
+
+	bar.InputBegan:Connect(function(input)
+
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+
+			setFromX(input.Position.X)
+
+			local connection
+
+			connection = UserInputService.InputChanged:Connect(function(move)
+
+				if move.UserInputType == Enum.UserInputType.MouseMovement
+					or move.UserInputType == Enum.UserInputType.Touch then
+
+					setFromX(move.Position.X)
+				end
+			end)
+
+			local ended
+
+			ended = UserInputService.InputEnded:Connect(function(endInput)
+
+				if endInput.UserInputType == Enum.UserInputType.MouseButton1
+					or endInput.UserInputType == Enum.UserInputType.Touch then
+
+					connection:Disconnect()
+					ended:Disconnect()
+				end
+			end)
+		end
+	end)
+
+	return frame
+end
+
+--========================================================
+-- ESP PAGE
+--========================================================
+
+local ESPPage = Pages.ESP
+
+card(
+	ESPPage,
+	"ESP DEBUG",
+	"Developer visualization tools for your own game."
+)
+
+toggle(
+	ESPPage,
+	"Player ESP",
+	"PlayerESP"
+)
+
+toggle(
+	ESPPage,
+	"NPC ESP",
+	"NPCESP"
+)
+
+toggle(
+	ESPPage,
+	"Monster ESP",
+	"MonsterESP"
+)
+
+toggle(
+	ESPPage,
+	"Item ESP",
+	"ItemESP"
+)
+
+slider(
+	ESPPage,
+	"ESP Distance",
+	"ESPDistance",
+	50,
+	2000
+)
+
+--========================================================
+-- PLAYER PAGE
+--========================================================
+
+local PlayerPage = Pages.PLAYER
+
+card(
+	PlayerPage,
+	"PLAYER CONTROL",
+	"Movement testing for your own Roblox experience."
+)
+
+slider(
+	PlayerPage,
+	"WalkSpeed",
+	"Speed",
+	8,
+	100
+)
+
+slider(
+	PlayerPage,
+	"JumpPower",
+	"Jump",
+	25,
+	150
+)
+
+toggle(
+	PlayerPage,
+	"Fly",
+	"Fly"
+)
+
+toggle(
+	PlayerPage,
+	"NoClip",
+	"NoClip"
+)
+
+toggle(
+	PlayerPage,
+	"Infinite Jump",
+	"InfiniteJump"
+)
+
+--========================================================
+-- CHARACTER CONTROL
+--========================================================
+
+local function applyMovement()
+
+	local character = LocalPlayer.Character
+
+	if not character then
+		return
+	end
+
+	local humanoid =
+		character:FindFirstChildOfClass("Humanoid")
+
+	if not humanoid then
+		return
+	end
+
+	humanoid.WalkSpeed = Config.Speed
+	humanoid.JumpPower = Config.Jump
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+
+	task.wait(0.5)
+
+	applyMovement()
+end)
+
+RunService.Heartbeat:Connect(function()
+
+	applyMovement()
+
+	if Config.NoClip then
+
+		local character = LocalPlayer.Character
+
+		if character then
+
+			for _, object in ipairs(character:GetDescendants()) do
+
+				if object:IsA("BasePart") then
+					object.CanCollide = false
+				end
 			end
 		end
 	end
 end)
 
---==================================================
--- INFINITE JUMP
---==================================================
+UserInputService.JumpRequest:Connect(function()
 
-UIS.JumpRequest:Connect(function()
+	if Config.InfiniteJump then
 
-	if not S.InfJump then return end
+		local humanoid =
+			LocalPlayer.Character
+			and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
 
-	local c=LP.Character
-	local h=c and c:FindFirstChildOfClass("Humanoid")
-
-	if h then
-		h:ChangeState(
-			Enum.HumanoidStateType.Jumping
-		)
+		if humanoid then
+			humanoid:ChangeState(
+				Enum.HumanoidStateType.Jumping
+			)
+		end
 	end
 end)
 
---==================================================
+--========================================================
 -- FLY
---==================================================
+--========================================================
 
-Run.RenderStepped:Connect(function()
+local FlyConnection
 
-	if not S.Fly then return end
+local function stopFly()
 
-	local c=LP.Character
-	if not c then return end
+	if FlyConnection then
+		FlyConnection:Disconnect()
+		FlyConnection = nil
+	end
+end
 
-	local r=c:FindFirstChild("HumanoidRootPart")
-	local h=c:FindFirstChildOfClass("Humanoid")
+local function startFly()
 
-	if r and h then
+	stopFly()
 
-		local d=h.MoveDirection
+	FlyConnection = RunService.RenderStepped:Connect(function()
 
-		r.AssemblyLinearVelocity=Vector3.new(
-			d.X*V.FlySpeed,
-			0,
-			d.Z*V.FlySpeed
+		if not Config.Fly then
+			return
+		end
+
+		local character = LocalPlayer.Character
+
+		if not character then
+			return
+		end
+
+		local root =
+			character:FindFirstChild("HumanoidRootPart")
+
+		local humanoid =
+			character:FindFirstChildOfClass("Humanoid")
+
+		if not root or not humanoid then
+			return
+		end
+
+		local camera = workspace.CurrentCamera
+
+		if not camera then
+			return
+		end
+
+		local direction = humanoid.MoveDirection
+
+		if direction.Magnitude > 0 then
+			root.AssemblyLinearVelocity =
+				direction * 50
+		else
+			root.AssemblyLinearVelocity =
+				Vector3.zero
+		end
+	end)
+end
+
+startFly()
+
+--========================================================
+-- ADMIN PAGE
+--========================================================
+
+local AdminPage = Pages.ADMIN
+
+card(
+	AdminPage,
+	"ADMIN SERVER",
+	"Server-authoritative commands. Admin access is checked by UserId."
+)
+
+local CommandBox = create("TextBox", {
+	Size = UDim2.new(1, -5, 0, 44),
+	BackgroundColor3 = Theme.Card,
+	Text = "",
+	PlaceholderText = ";kill Name",
+	PlaceholderColor3 = Theme.SubText,
+	TextColor3 = Theme.Text,
+	TextSize = 12,
+	Font = Enum.Font.Gotham,
+	ClearTextOnFocus = false,
+}, AdminPage)
+
+corner(CommandBox)
+stroke(CommandBox, Theme.Accent, 0.8)
+
+create("UIPadding", {
+	PaddingLeft = UDim.new(0, 12),
+	PaddingRight = UDim.new(0, 12),
+}, CommandBox)
+
+local SendCommand = create("TextButton", {
+	Size = UDim2.new(1, -5, 0, 42),
+	BackgroundColor3 = Theme.Accent,
+	Text --========================================================
+-- ADMIN PAGE - CONTINUED
+--========================================================
+
+local SendCommand = create("TextButton", {
+	Size = UDim2.new(1, -5, 0, 42),
+	BackgroundColor3 = Theme.Accent,
+	Text = "SEND COMMAND",
+	TextColor3 = Color3.new(1, 1, 1),
+	TextSize = 12,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+}, AdminPage)
+
+corner(SendCommand, 8)
+
+local AdminStatus = create("TextLabel", {
+	Size = UDim2.new(1, -5, 0, 35),
+	BackgroundTransparency = 1,
+	Text = "Ready.",
+	TextColor3 = Theme.SubText,
+	TextSize = 11,
+	Font = Enum.Font.Gotham,
+	TextWrapped = true,
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, AdminPage)
+
+local function sendAdminCommand()
+	local command = CommandBox.Text
+
+	if command == "" then
+		AdminStatus.Text = "⚠ Nhập command trước."
+		return
+	end
+
+	Remote:FireServer("Command", command)
+	AdminStatus.Text = "✓ Đã gửi: " .. command
+end
+
+SendCommand.Activated:Connect(sendAdminCommand)
+
+CommandBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		sendAdminCommand()
+	end
+end)
+
+Remote.OnClientEvent:Connect(function(action, data)
+	if action == "AdminStatus" then
+		AdminStatus.Text = tostring(data)
+	end
+end)
+
+--========================================================
+-- PERFORMANCE PAGE
+--========================================================
+
+local PerformancePage = Pages.PERFORMANCE
+
+card(
+	PerformancePage,
+	"PERFORMANCE MONITOR",
+	"Real-time client performance information."
+)
+
+local FPSLabel = create("TextLabel", {
+	Size = UDim2.new(1, -5, 0, 42),
+	BackgroundColor3 = Theme.Card,
+	Text = "FPS: --",
+	TextColor3 = Theme.Text,
+	TextSize = 14,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, PerformancePage)
+
+corner(FPSLabel)
+
+local PingLabel = create("TextLabel", {
+	Size = UDim2.new(1, -5, 0, 42),
+	BackgroundColor3 = Theme.Card,
+	Text = "Ping: --",
+	TextColor3 = Theme.Text,
+	TextSize = 14,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, PerformancePage)
+
+corner(PingLabel)
+
+local PlayersLabel = create("TextLabel", {
+	Size = UDim2.new(1, -5, 0, 42),
+	BackgroundColor3 = Theme.Card,
+	Text = "Players: 0",
+	TextColor3 = Theme.Text,
+	TextSize = 14,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, PerformancePage)
+
+corner(PlayersLabel)
+
+toggle(
+	PerformancePage,
+	"High FPS Mode",
+	"HighFPS",
+	function(enabled)
+		if enabled then
+			RunService:Set3dRenderingEnabled(true)
+		end
+	end
+)
+
+toggle(
+	PerformancePage,
+	"Hide Visual Effects",
+	"HideEffects"
+)
+
+--========================================================
+-- FPS / PING MONITOR
+--========================================================
+
+local frames = 0
+local fps = 0
+local lastFPSUpdate = os.clock()
+
+RunService.RenderStepped:Connect(function()
+	frames += 1
+
+	local now = os.clock()
+
+	if now - lastFPSUpdate >= 1 then
+		fps = frames
+		frames = 0
+		lastFPSUpdate = now
+
+		FPSLabel.Text = "FPS: " .. tostring(fps)
+	end
+end)
+
+task.spawn(function()
+	while ScreenGui.Parent do
+		task.wait(1)
+
+		local ping = 0
+
+		pcall(function()
+			local network = Stats.Network
+			local serverStats = network:FindFirstChild("ServerStatsItem")
+
+			if serverStats then
+				local dataPing = serverStats:FindFirstChild("Data Ping")
+
+				if dataPing then
+					ping = dataPing:GetValue()
+				end
+			end
+		end)
+
+		if ping == 0 then
+			pcall(function()
+				ping = LocalPlayer:GetNetworkPing() * 1000
+			end)
+		end
+
+		PingLabel.Text = string.format(
+			"Ping: %d ms",
+			math.floor(ping + 0.5)
 		)
+
+		PlayersLabel.Text =
+			"Players: " .. tostring(#Players:GetPlayers())
 	end
 end)
 
---==================================================
--- LIVE SPEED / JUMP
---==================================================
+--========================================================
+-- STEALTH PAGE
+--========================================================
 
-Run.Heartbeat:Connect(function()
+local StealthPage = Pages.STEALTH
 
-	local c=LP.Character
-	local h=c and c:FindFirstChildOfClass("Humanoid")
+card(
+	StealthPage,
+	"STEALTH TEST",
+	"Local visibility test for your own Roblox experience."
+)
 
-	if not h then return end
+local StealthInfo = create("TextLabel", {
+	Size = UDim2.new(1, -5, 0, 55),
+	BackgroundColor3 = Theme.Card,
+	Text = "Stealth OFF\nCharacter đang hiển thị bình thường.",
+	TextColor3 = Theme.Text,
+	TextSize = 11,
+	Font = Enum.Font.Gotham,
+	TextWrapped = true,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Center,
+}, StealthPage)
 
-	if S.Speed then
-		h.WalkSpeed=V.Speed
+corner(StealthInfo)
+
+local SavedTransparency = {}
+
+local function setStealth(enabled)
+	local character = LocalPlayer.Character
+
+	if not character then
+		return
 	end
 
-	if S.Jump then
-		h.JumpPower=V.Jump
+	if enabled then
+		SavedTransparency = {}
+
+		for _, object in ipairs(character:GetDescendants()) do
+			if object:IsA("BasePart") or object:IsA("Decal") then
+				SavedTransparency[object] = object.Transparency
+				object.Transparency = 1
+			elseif object:IsA("ParticleEmitter")
+				or object:IsA("Trail")
+				or object:IsA("Beam") then
+				object.Enabled = false
+			end
+		end
+
+		StealthInfo.Text =
+			"Stealth ON\nLocal character visibility đã tắt."
+	else
+		for object, transparency in pairs(SavedTransparency) do
+			if object and object.Parent then
+				object.Transparency = transparency
+			end
+		end
+
+		SavedTransparency = {}
+
+		StealthInfo.Text =
+			"Stealth OFF\nCharacter đang hiển thị bình thường."
+	end
+end
+
+toggle(
+	StealthPage,
+	"Stealth Test",
+	"Stealth",
+	setStealth
+)
+
+--========================================================
+-- SETTINGS PAGE
+--========================================================
+
+local SettingsPage = Pages.SETTINGS
+
+card(
+	SettingsPage,
+	"SETTINGS",
+	"UI configuration for PHHuyHub V3."
+)
+
+local ThemeButton = create("TextButton", {
+	Size = UDim2.new(1, -5, 0, 44),
+	BackgroundColor3 = Theme.Card,
+	Text = "THEME: " .. Config.Theme,
+	TextColor3 = Theme.Text,
+	TextSize = 12,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+}, SettingsPage)
+
+corner(ThemeButton)
+
+local ScaleButton = create("TextButton", {
+	Size = UDim2.new(1, -5, 0, 44),
+	BackgroundColor3 = Theme.Card,
+	Text = "UI SCALE: " .. tostring(Config.UIScale),
+	TextColor3 = Theme.Text,
+	TextSize = 12,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+}, SettingsPage)
+
+corner(ScaleButton)
+
+local ResetButton = create("TextButton", {
+	Size = UDim2.new(1, -5, 0, 44),
+	BackgroundColor3 = Theme.Accent,
+	Text = "RESET SETTINGS",
+	TextColor3 = Color3.new(1, 1, 1),
+	TextSize = 12,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+}, SettingsPage)
+
+corner(ResetButton)
+
+--========================================================
+-- THEME CYCLE
+--========================================================
+
+local ThemeOrder = {
+	"CYBER",
+	"MIDNIGHT",
+	"PURPLE",
+	"OCEAN",
+}
+
+local function nextTheme()
+	local index = table.find(ThemeOrder, Config.Theme) or 1
+	index += 1
+
+	if index > #ThemeOrder then
+		index = 1
+	end
+
+	Config.Theme = ThemeOrder[index]
+	Theme = Themes[Config.Theme]
+
+	ThemeButton.Text = "THEME: " .. Config.Theme
+end
+
+ThemeButton.Activated:Connect(nextTheme)
+
+--========================================================
+-- UI SCALE
+--========================================================
+
+local UIScaleObject = create("UIScale", {
+	Scale = Config.UIScale,
+}, Main)
+
+local ScaleValues = {
+	0.8,
+	0.9,
+	1,
+	1.1,
+	1.2,
+}
+
+local function nextScale()
+	local current = table.find(ScaleValues, Config.UIScale) or 3
+
+	current += 1
+
+	if current > #ScaleValues then
+		current = 1
+	end
+
+	Config.UIScale = ScaleValues[current]
+	UIScaleObject.Scale = Config.UIScale
+
+	ScaleButton.Text =
+		"UI SCALE: " .. tostring(Config.UIScale)
+end
+
+ScaleButton.Activated:Connect(nextScale)
+
+--========================================================
+-- RESET
+--========================================================
+
+ResetButton.Activated:Connect(function()
+
+	Config.Speed = 16
+	Config.Jump = 50
+
+	Config.Fly = false
+	Config.NoClip = false
+	Config.InfiniteJump = false
+
+	Config.PlayerESP = false
+	Config.NPCESP = false
+	Config.MonsterESP = false
+	Config.ItemESP = false
+
+	Config.HighFPS = false
+	Config.HideEffects = false
+
+	Config.Stealth = false
+
+	Config.UIScale = 1
+	Config.Theme = "CYBER"
+
+	Theme = Themes[Config.Theme]
+
+	UIScaleObject.Scale = 1
+
+	ThemeButton.Text = "THEME: CYBER"
+	ScaleButton.Text = "UI SCALE: 1"
+
+	setStealth(false)
+
+	applyMovement()
+end)
+
+--========================================================
+-- MINIMIZE / CLOSE
+--========================================================
+
+local Opened = true
+local Closed = false
+
+Min.Activated:Connect(function()
+
+	if Closed then
+		return
+	end
+
+	Opened = not Opened
+
+	Content.Visible = Opened
+	Sidebar.Visible = Opened
+
+	if Opened then
+		Main.Size = UDim2.fromOffset(700, 430)
+		Min.Text = "—"
+	else
+		Main.Size = UDim2.fromOffset(270, 55)
+		Min.Text = "+"
 	end
 end)
 
-print("================================")
-print(" PHHUYHUB V3 • NEON BLUE")
-print(" CLIENT FULLY LOADED")
-print("================================")
+Close.Activated:Connect(function()
+
+	Closed = true
+	Opened = false
+
+	Main.Visible = false
+	Float.Visible = true
+end)
+
+--========================================================
+-- FLOAT BUTTON
+--========================================================
+
+Float.Activated:Connect(function()
+
+	if Closed then
+		Closed = false
+	end
+
+	Main.Visible = true
+	Opened = true
+
+	Content.Visible = true
+	Sidebar.Visible = true
+
+	Main.Size = UDim2.fromOffset(700, 430)
+	Min.Text = "—"
+end)
+
+--========================================================
+-- FLOAT BUTTON DRAG
+--========================================================
+
+local floatDragging = false
+local floatStart
+local floatPosition
+
+Float.InputBegan:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		floatDragging = true
+		floatStart = input.Position
+		floatPosition = Float.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+
+	if not floatDragging then
+		return
+	end
+
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement
+		and input.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+
+	local delta = input.Position - floatStart
+
+	Float.Position = UDim2.new(
+		floatPosition.X.Scale,
+		floatPosition.X.Offset + delta.X,
+		floatPosition.Y.Scale,
+		floatPosition.Y.Offset + delta.Y
+	)
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		floatDragging = false
+	end
+end)
+
+--========================================================
+-- CHARACTER RESPAWN
+--========================================================
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+
+	task.wait(0.5)
+
+	applyMovement()
+
+	if Config.Stealth then
+		setStealth(true)
+	end
+end)
+
+--========================================================
+-- INITIAL STATE
+--========================================================
+
+Main.Visible = true
+Float.Visible = true
+Content.Visible = true
+Sidebar.Visible = true
+
+Opened = true
+Closed = false
+
+print("PHHuyHub V3 Client loaded successfully.")
